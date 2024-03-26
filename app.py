@@ -7,15 +7,24 @@ import pandas as pd
 import base64
 import requests
 import io
-from pdf2image import convert_from_bytes
+import fitz
+from pathlib import Path
 
+
+def ensure_directory_exists(directory_path):
+    Path(directory_path).mkdir(parents=True, exist_ok=True)
 
 # Load environment variables
 load_dotenv()
 
-def pdf_to_image(uploaded_file):
-    images = convert_from_bytes(uploaded_file.read())
-    return images[0]
+def pdf_to_image_mupdf(uploaded_file):
+    # Use PyMuPDF to convert the first page of the PDF to an image
+    doc = fitz.open(stream=uploaded_file.getvalue(), filetype="pdf")
+    page = doc.load_page(0)  # Only converting the first page
+    pix = page.get_pixmap()
+    img_data = pix.tobytes("ppm")
+    image = Image.open(io.BytesIO(img_data))
+    return image
 
 def encode_image(image_data):
     if isinstance(image_data, str):  # If path to image file is provided
@@ -29,6 +38,9 @@ def encode_image(image_data):
             return base64.b64encode(buffer.getvalue()).decode('utf-8')
     else:
         raise ValueError("Invalid image data provided.")
+
+ensure_directory_exists('uploaded_files/')
+ensure_directory_exists('static/')
 
 def get_openai_response(user_input, base64_image,):
     headers = {
@@ -171,9 +183,8 @@ If any detail is unclear or not sure, please specify an error as an Error Note i
 
 if uploaded_file is not None:
     if uploaded_file.type == "application/pdf":
-        # Handle PDF upload
         st.warning("PDF file detected. Converting to image...")
-        image = pdf_to_image(uploaded_file)
+        image = pdf_to_image_mupdf(uploaded_file)
         encoded_image = encode_image(image)
     else:
         image = Image.open(uploaded_file)
