@@ -75,11 +75,13 @@ def get_openai_response(user_input, base64_image,):
      
     raw_json = responseJosn['choices'][0]['message']['content']
     cleaned_json = raw_json.replace("json", "").replace("```", "").strip()
-    try:
-        return json.loads(cleaned_json)
-    except json.JSONDecodeError as e:
-        print(f"Failed to decode JSON from the model response: {e}")
-        return {}
+    details_df = pd.DataFrame([json.loads(cleaned_json)])
+    st.table(details_df)
+    # try:
+    #     return json.loads(cleaned_json)
+    # except json.JSONDecodeError as e:
+    #     print(f"Failed to decode JSON from the model response: {e}")
+    #     return {}
 
 
 def input_image_details(uploaded_file):
