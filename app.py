@@ -108,9 +108,10 @@ def update_csv(filename, details):
 
 # Streamlit app setup
 st.set_page_config(page_title="Invoice Extractor")
-st.header("CBL Invoice Automation App")
 logo_path = "cbl.png"
 st.image(logo_path, width=100)
+st.header("CBL Invoice Automation App")
+
 
 uploaded_file = st.file_uploader("Choose an image of the invoice...", type=["jpg", "jpeg", "png", 'pdf'])
 
