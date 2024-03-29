@@ -108,13 +108,15 @@ def update_csv(filename, details):
 
 # Streamlit app setup
 st.set_page_config(page_title="Invoice Extractor")
-st.header("Invoice Extractor")
+st.header("CBL Invoice Automation App")
+logo_path = "cbl.png"
+st.image(logo_path, width=100)
 
 uploaded_file = st.file_uploader("Choose an image of the invoice...", type=["jpg", "jpeg", "png", 'pdf'])
 
 
 input_prompt ='''
-Extract the following details from the invoice:
+You going to act as a OCR.Extract the following details from the invoice:
 
 - Invoice Type (Non-Tax Invoices, Tax Invoices, or SVAT Invoices)
 - Supplier Name
@@ -126,7 +128,8 @@ Extract the following details from the invoice:
 - Company SVAT No (also can be Susspended tax Number)
 - Company Business Reg. No
 - Invoice No
-- PO Number (must be in number format only, don't get BPO Number )
+- PO Number (must be in number format only, don't get BPO Number,)
+- SBU (SBU number should display) 
 - Invoice Date (formatted as DD/MM/YYYY)
 - Currency
 - Total Value (formatted as a number, also can be sub total/amount or items total/amount)
@@ -135,7 +138,36 @@ Extract the following details from the invoice:
 
 If any value is missing, set it to null only.
 
-Identify and extract the Invoice type from the text:
+
+When considering the po number should follow below details:
+
+1. If there is any value is missing for PO number name, Do not match with the address when there is no po number.set it to null only.
+2. If there is a PO number or in other alternative name it should be 10 digit and if it less than 10 add 0 before it till it become 10 digit.
+3. When PO number name is not mentioned consider these always alternative name for PO number: purchase order number , order number, buyer order number, your order refrence number, PO NO, Customer PO, Cust. PO No, Purchase Ord.No , Purchase and Manual NO.
+4. Extract the exact numbers in the invoices which is relevent to the given name.
+
+5. When PO number first digit is not clear have to match with the address which is belowed here and arrange the first digit.  
+   as per the given range first digit.
+6. Ranges Should be:
+    - If po number between 7100000000 - 7999999999 address will be Ceylon Buiscuit Limited, Makumbura Pannipitiya.
+        It's SBU will be C100.
+    - If po number between 0041000000 - 0051999999 address will be CBL Food International (PVT) Limited, Ranala.
+        It's SBU will be C200.
+    - If po number between 0310000001 - 0389999999 address will be Convenience food (PVT) LTD,7th Lane,Off Borupana Road,Kandawala,Ratmalana.
+        It's SBU will be C300.
+    - If po number between 0400000000 - 0469999999 address will be CBL Plenty foods (PVT) LTD,Sir John Kothalawala Mawatha,Ratmalana.
+        It's SBU will be C400.
+    - If po number between 5300000000 - 5999999999 address will be CBL Exports (PVT) LTD,Seethawaka Export Processing Zone,Seethawaka.
+        It's SBU will be C500.
+    - If po number between 0610000000 - 0659999999 address will be CBL Natural Foods (PVT) LTD,Awariwatte Road, Heenetiyana,Minuwangoda.
+        It's SBU will be C600.
+    - If po number between 1710000001 - 1759999999 address will be CBL Cocos (PVT) LTD,No. 145, Colombo Rd, Alawwa, Alawwa.
+        It's SBU will be C700.
+    - If po number between 1810000001 - 1869999999 address will be CBL Global Foods (PVT) LTD,Colombo Road, Alawwa.
+        It's SBU will be C700.
+7. When PO number not in above range it should identify as a wrong PO.
+
+When considering the Invoice type should follow below details:
 
 1. For Tax Invoices:
    a. Tax Invoice as the header
@@ -177,9 +209,10 @@ All text content, including headers and footers, must be successfully captured.
 
 Please provide these details as a JSON object only.
 
+The invoice date format should be DD/MM/YYYY, correcting the month to the most recent if unclear but not future-dating.
+
 If any detail is unclear or not sure, please specify an error as an Error Note in the JSON object. If no error is found, set it to Null.
 '''
-
 
 if uploaded_file is not None:
     if uploaded_file.type == "application/pdf":
