@@ -9,6 +9,9 @@ from thefuzz import process
 from pdf2image import convert_from_path
 from PIL import Image
 import time
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Directory setup
 base_folder = "upload"
@@ -75,6 +78,7 @@ def get_openai_response(base64_image,prompt):
     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
     if response.status_code == 200:
         response_json = response.json()
+
         raw_json = response_json['choices'][0]['message']['content']
         response_text = raw_json.replace("json", "").replace("```", "").strip()
         try:
@@ -156,7 +160,8 @@ def process_files(batch_files):
         'invoice_tax_amount',
         'comment'
          as keys.
-    
+
+    must retun json object only no more any text provide
     When considering the Invoice type should follow below details:
 
     1. For Tax Invoices:
