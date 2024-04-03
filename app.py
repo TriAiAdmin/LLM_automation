@@ -90,9 +90,9 @@ def save_uploaded_file(uploaded_file):
         print(f"Failed to save file: {e}")
         return False
 
-# def update_csv(filename, details):
-#     new_row_df = pd.DataFrame([{**details, 'filename': filename}])
-#     new_row_df.to_csv('data.csv', mode='a', index=False, header=not pd.read_csv('data.csv').shape[0])
+def update_csv(filename, details):
+    new_row_df = pd.DataFrame([{**details, 'filename': filename}])
+    new_row_df.to_csv('data.csv', mode='a', index=False, header=not pd.read_csv('data.csv').shape[0])
 
 # Streamlit app setup
 st.set_page_config(page_title="Invoice Extractor")
@@ -106,25 +106,37 @@ You going to act as a OCR.Extract the following details from the invoice:
 
 - Invoice Type (Non-Tax Invoices, Tax Invoices, or SVAT Invoices)
 - Supplier Name
+- Supplier Address
+- Supplier Telephone Number (formatted as ISO standard phone number format)
+- Supplier Email
+- Supplier Website
+- Company VAT No (also can be Customer VAT Registration Number)
+- Company SVAT No (also can be Susspended tax Number)
+- Company Business Reg. No
 - Invoice No
 - PO Number (must be in number format only, don't get BPO Number,)
 - SBU (SBU number should display) 
 - Invoice Date (formatted as DD/MM/YYYY)
-
+- Currency
+- Total Value (formatted as a number, also can be sub total/amount or items total/amount)
+- Total VAT (formatted as a number)
+- Total Invoice Amount (formatted as a number also can be grand total)
 
 If any value is missing, set it to null only.
 
 
 When considering the po number should follow below details:
 
-1. If there is any value is missing for PO number name, Do not match with the address when there is no po number.set it to null only.
+1. If there is any value is missing for PO name, Do not match with the address when there is no po number.set it to null only, ensure this all the time, make sure always if PO number is not there do not match it with the address, set it to null only. 
 2. If there is a PO number or in other alternative name it should be 10 digit and if it less than 10 add 0 before it till it become 10 digit.
 3. When PO number name is not mentioned consider these always alternative name for PO number: purchase order number , order number, buyer order number, your order refrence number, PO NO, Customer PO, Cust. PO No, Purchase Ord.No , Purchase and Manual NO.
-4. Extract the exact numbers in the invoices which is relevent to the given name.
-
-5. When PO number first digit is not clear have to match with the address which is belowed here and arrange the first digit.  
-   as per the given range first digit.
-6. Ranges Should be:
+4. Extract the exact numbers in the invoices which is relevent to the given name. Ensure all the time to extract the correct number.
+5. When PO number is less then 10 digit add 0 before it till it become 10 digit.
+6. When PO number first digit is not clear have to match with the address which is belowed here and arrange the first digit.  
+   as per the given range first digit make sure always this rule is for only you found PO Number.
+7. Make sure all the time if PO Name or Other Alternative names doesn't mention in the upload invoice it should be set to null always, make sure always if PO number is not there do not match it with the address, It's must. 
+8. Ensure all the time to extract the PO numbers correctly same as in the uploaded invoice.
+9. Ranges Should be:
     - If po number between 7100000000 - 7999999999 address will be Ceylon Buiscuit Limited, Makumbura Pannipitiya.
         It's SBU will be C100.
     - If po number between 0041000000 - 0051999999 address will be CBL Food International (PVT) Limited, Ranala.
@@ -140,8 +152,39 @@ When considering the po number should follow below details:
     - If po number between 1710000001 - 1759999999 address will be CBL Cocos (PVT) LTD,No. 145, Colombo Rd, Alawwa, Alawwa.
         It's SBU will be C700.
     - If po number between 1810000001 - 1869999999 address will be CBL Global Foods (PVT) LTD,Colombo Road, Alawwa.
-        It's SBU will be C700.
-7. When PO number not in above range it should identify as a wrong PO.
+        It's SBU will be C800.
+10. When PO number not in above range it should identify as a wrong PO.
+
+
+When considering the Invoice type should follow below details:
+
+1. For Tax Invoices:
+   a. Tax Invoice as the header
+   b. Words like VAT/TAX present in the invoice
+   c. VAT Amount > 0 (≠ null)
+   d VAT % > 0 (≠ null)
+   e. Subtotal ≠ Invoice Amount
+
+   Consider as a tax invoice if the pair c – d – e is valid.
+
+2. For Non-Tax Invoices:
+   a Should come without the headings Tax Invoices sans Tax. VAT – but some invoices come with those words where they should be treated as Non-tax and the later T=0 code will be applied after correct identification with SAP integration
+   b VAT amount = 0
+   c VAT % = 0
+   d Subtotal = Invoice Amount
+
+   Consider as a non-tax invoice if the pair b – c – d is valid.
+
+3. For SVAT Invoices:
+   a. Words like SVAT mentioned in the invoice
+   b. SVAT %
+   c. SVAT amount
+   d. Suspended VAT
+   c. Total amount
+
+   Logic to recognize if this is an SVAT:
+   - C (VAT Amount) is not null
+   - B (VAT %) is not null
 
 Ensure that all currency values are converted to a standard format ISO 4217, default value LKR.
 
@@ -154,6 +197,8 @@ Supplier data only get from the invoice.
 All text content, including headers and footers, must be successfully captured.
 
 Please provide these details as a JSON object only.
+
+The invoice date format should be DD/MM/YYYY, correcting the month to the most recent if unclear but not future-dating.
 
 If any detail is unclear or not sure, please specify an error as an Error Note in the JSON object. If no error is found, set it to Null.
 '''
@@ -184,7 +229,7 @@ if uploaded_file is not None:
 
         if response_details:
             st.json(response_details)  # Display the JSON response
-            #update_csv(uploaded_file.name, response_details)
+            update_csv(uploaded_file.name, response_details)
         else:
             st.error("Failed to extract details from the invoice.")
     else:
