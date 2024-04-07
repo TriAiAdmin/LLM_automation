@@ -128,7 +128,7 @@ If any value is missing, set it to null only.
 When considering the po number should follow below details:
 
 1. If there is any value is missing for PO name, Do not match with the address when there is no po number.set it to null only, ensure this all the time, make sure always if PO number is not there do not match it with the address, set it to null only.
-2. When PO number or alternative names for PO number's number count is less then 8 numbers it should set to Wrong PO, it's must follow this, ensure this always. 
+2. When PO number or alternative names for PO number's number count is less then 8 numbers it should set to Wrong PO, should display in jason as Wrong PO it's must follow this, ensure this always. 
 3. If there is a PO number or in other alternative name it should be 10 digit and if it 9 digit add 0 before and make it 10 digit.
 4. If PO number or it's alternative names are less then 9 digits it should display as wrong PO.
 5. When PO number name is not mentioned consider these always alternative name for PO number: purchase order number , order number, buyer order number, your order refrence number, PO NO, Customer PO, Cust. PO No, Purchase Ord.No , Purchase, company name Order No and Manual NO.
