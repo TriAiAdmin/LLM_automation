@@ -127,16 +127,20 @@ If any value is missing, set it to null only.
 
 When considering the po number should follow below details:
 
-1. If there is any value is missing for PO name, Do not match with the address when there is no po number.set it to null only, ensure this all the time, make sure always if PO number is not there do not match it with the address, set it to null only. 
-2. If there is a PO number or in other alternative name it should be 10 digit and if it less than 10 add 0 before it till it become 10 digit.
-3. When PO number name is not mentioned consider these always alternative name for PO number: purchase order number , order number, buyer order number, your order refrence number, PO NO, Customer PO, Cust. PO No, Purchase Ord.No , Purchase and Manual NO.
-4. Extract the exact numbers in the invoices which is relevent to the given name. Ensure all the time to extract the correct number.
-5. When PO number is less then 10 digit add 0 before it till it become 10 digit.
-6. When PO number first digit is not clear have to match with the address which is belowed here and arrange the first digit.  
+1. If there is any value is missing for PO name, Do not match with the address when there is no po number.set it to null only, ensure this all the time, make sure always if PO number is not there do not match it with the address, set it to null only.
+2. When PO number or alternative names for PO number's number count is less then 8 numbers it should set to Wrong PO, it's must follow this, ensure this always. 
+3. If there is a PO number or in other alternative name it should be 10 digit and if it 9 digit add 0 before and make it 10 digit.
+4. If PO number or it's alternative names are less then 9 digits it should display as wrong PO.
+5. When PO number name is not mentioned consider these always alternative name for PO number: purchase order number , order number, buyer order number, your order refrence number, PO NO, Customer PO, Cust. PO No, Purchase Ord.No , Purchase, company name Order No and Manual NO.
+6. Extract the exact numbers in the invoices which is relevent to the given name. Ensure all the time to extract the correct number.
+7. When PO number first digit is not clear have to match with the address which is belowed here and arrange the first digit.  
    as per the given range first digit make sure always this rule is for only you found PO Number.
-7. Make sure all the time if PO Name or Other Alternative names doesn't mention in the upload invoice it should be set to null always, make sure always if PO number is not there do not match it with the address, It's must. 
-8. Ensure all the time to extract the PO numbers correctly same as in the uploaded invoice.
-9. Ranges Should be:
+8. Make sure all the time if PO Name or Other Alternative names doesn't mention in the upload invoice it should be set to null always, make sure always if PO number is not there do not match it with the address, this is must , ensure this output always. 
+9. Ensure all the time to extract the PO numbers correctly same as in the uploaded invoice.
+10. Always check if the PO number or other alternatives do not meet the criteria in the preferred ranges, and if the PO number or alternative name is less than 9 digits, it should be set as the wrong PO.
+    You should not compare it with the address when there is no PO number or the other alternative name is not there. The SBU should be set to null, make ensure this always.
+11. When PO number or alternative names for PO number is null or Wrong PO make sure SBU also null.
+12. Ranges Should be:
     - If po number between 7100000000 - 7999999999 address will be Ceylon Buiscuit Limited, Makumbura Pannipitiya.
         It's SBU will be C100.
     - If po number between 0041000000 - 0051999999 address will be CBL Food International (PVT) Limited, Ranala.
@@ -153,8 +157,7 @@ When considering the po number should follow below details:
         It's SBU will be C700.
     - If po number between 1810000001 - 1869999999 address will be CBL Global Foods (PVT) LTD,Colombo Road, Alawwa.
         It's SBU will be C800.
-10. When PO number not in above range it should identify as a wrong PO.
-
+13. Ensure the above structure thoroughly it's essential always.
 
 When considering the Invoice type should follow below details:
 
