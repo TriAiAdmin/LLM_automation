@@ -109,20 +109,18 @@ def find_best_match(name, address, vendor_df):
 
 def process_files(batch_files):
     prompt = '''Extract the following details from the invoice:
-        Company Code
+       
         Invoice Type (Non-Tax Invoices, Tax Invoices, or SVAT Invoices),
         Invoice No,
         PO number,
-        SBU number,
         Invoice Date,
         Invoice Amount,
         Invoice Tax Amount,
         from the image and return the response as a JSON object with
-        'company_code'
+        'sbu',
         'invoice_type',
         'invoice_no',
         'po_number',
-        'sbu_number,'
         'invoice_date',
         'invoice_amount',
         'invoice_tax_amount',
@@ -162,37 +160,37 @@ def process_files(batch_files):
 
     When considering the po number should follow below details:
 
-    1. If there is any value is missing for PO name, Do not match with the address when there is no po number.set it to null only, ensure this all the time, make sure always if PO number is not there do not match it with the address, set it to null only.
-    2. When PO number or alternative names for PO number's number count is less then 8 numbers it should set to Wrong PO, should display in jason as Wrong PO it's must follow this, ensure this always. 
-    3. If there is a PO number or in other alternative name it should be 10 digit and if it 9 digit add 0 before and make it 10 digit.
-    4. If PO number or it's alternative names are less then 9 digits it should display as wrong PO.
-    5. When PO number name is not mentioned consider these always alternative name for PO number: purchase order number , order number, buyer order number, your order refrence number, PO NO, Customer PO, Cust. PO No, Purchase Ord.No , Purchase, company name Order No and Manual NO.
-    6. Extract the exact numbers in the invoices which is relevent to the given name. Ensure all the time to extract the correct number.
-    7. When PO number first digit is not clear have to match with the address which is belowed here and arrange the first digit.  
+    1. When PO number name is not mentioned consider these always alternative name for PO number: purchase order number , order number, buyer order number, your order refrence number, PO NO, Customer PO, Cust. PO No, Purchase Ord.No , Purchase, company name Order No and Manual NO.
+    2. If there is any value is missing for PO name, Do not match with the address when there is no po number.set it to null only, ensure this all the time, make sure always if PO number is not there do not match it with the address, set it to null only.
+    3. When PO number or alternative names for PO number's number count is less then 8 numbers it should set to null, should display in jason as null it's must follow this, ensure this always.
+    4. When PO number or alternative names for PO number is null set sbu as null, make sure this always. 
+    5. If there is a PO number or in other alternative name it should be 10 digit and if it has 9 digit add 0 before and make it 10 digit, when PO number has 10 digits do not make any changes, make it sure always, ensure this always.
+    6. When the PO number has 10 digits don't make any changes in the PO number, make it sure always.
+    7. If PO number or it's alternative names are less then 8 digits it should display as null, make sure always when PO number is null sbu should be null. Make sure always result it should show up in the po_number side, make sure this always. 
+    8. When PO number first digit is not clear have to match with the address which is below here and arrange the first digit,  
        as per the given range first digit make sure always this rule is for only you found PO Number.
-    8. Make sure all the time if PO Name or Other Alternative names doesn't mention in the upload invoice it should be set to null always, make sure always if PO number is not there do not match it with the address, this is must , ensure this output always. 
-    9. Ensure all the time to extract the PO numbers correctly same as in the uploaded invoice.
-    10. Always check if the PO number or other alternatives do not meet the criteria in the preferred ranges, and if the PO number or alternative name is less than 9 digits, it should be set as the wrong PO.
-        You should not compare it with the address when there is no PO number or the other alternative name is not there. The SBU should be set to null, make ensure this always.
-    11. When PO number or alternative names for PO number is null or Wrong PO make sure SBU also null.
-    12. Ranges Should be:
+    9. Make sure all the time if PO Name or Other Alternative names doesn't mention in the upload invoice it should be set to null always, make sure always if PO number is null do not match  the address with the sbu, this is must , ensure this output always. 
+    11. Always check if the PO number or other alternatives do not meet the criteria in the preferred ranges, and if the PO number or alternative name is less than 9 digits, it should be set as the null in the po number display, when PO number is null sbu should set to null, it's must and ensure it always.
+        You should not compare it with the address when there is no PO number or the other alternative name is not there. The sbu should be set to null, make ensure this always.
+    12. 
+    13. Ranges Should be:
         - If po number between 7100000000 - 7999999999 address will be Ceylon Buiscuit Limited, Makumbura Pannipitiya.
-            It's SBU will be C100.
+            It's 'sbu' will be C100.
         - If po number between 0041000000 - 0051999999 address will be CBL Food International (PVT) Limited, Ranala.
-            It's SBU will be C200.
+            It's 'sbu' will be C200.
         - If po number between 0310000001 - 0389999999 address will be Convenience food (PVT) LTD,7th Lane,Off Borupana Road,Kandawala,Ratmalana.
-            It's SBU will be C300.
+            It's 'sbu' will be C300.
         - If po number between 0400000000 - 0469999999 address will be CBL Plenty foods (PVT) LTD,Sir John Kothalawala Mawatha,Ratmalana.
-            It's SBU will be C400.
+            It's 'sbu' will be C400.
         - If po number between 5300000000 - 5999999999 address will be CBL Exports (PVT) LTD,Seethawaka Export Processing Zone,Seethawaka.
-            It's SBU will be C500.
+            It's 'sbu' will be C500.
         - If po number between 0610000000 - 0659999999 address will be CBL Natural Foods (PVT) LTD,Awariwatte Road, Heenetiyana,Minuwangoda.
-            It's SBU will be C600.
+            It's 'sbu' will be C600.
         - If po number between 1710000001 - 1759999999 address will be CBL Cocos (PVT) LTD,No. 145, Colombo Rd, Alawwa, Alawwa.
-            It's SBU will be C700.
+            It's 'sbu' will be C700.
         - If po number between 1810000001 - 1869999999 address will be CBL Global Foods (PVT) LTD,Colombo Road, Alawwa.
-            It's SBU will be C800.
-    13. Ensure the above structure thoroughly it's essential always.
+            It's 'sbu' will be C800.
+    14. Ensure the above data thoroughly it's essential always.
 
     Ensure that all currency values are converted to a standard format ISO 4217, default value LKR, also base on supplier address and supplier phone number.
 
