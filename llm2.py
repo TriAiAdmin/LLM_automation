@@ -71,7 +71,7 @@ def get_openai_response(base64_image,prompt):
                 ]
             }
         ],
-        "max_tokens": 300
+        "max_tokens": 400
     }
 
     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
@@ -89,10 +89,11 @@ def get_openai_response(base64_image,prompt):
             invoice_date = response_data.get('invoice_date')
             invoice_amount = response_data.get('invoice_amount')
             invoice_tax_amount = response_data.get('invoice_tax_amount')
+            delivery_note_number = response_data.get('delivery_note_number')
             comment = response_data.get('comment')
         except json.JSONDecodeError:
-            sbu, invoice_type, invoice_no, po_number, invoice_date, invoice_amount, invoice_tax_amount, comment  = None, None, None, None, None, None, None, None
-        return sbu, invoice_type, invoice_no, po_number, invoice_date, invoice_amount, invoice_tax_amount, comment
+            sbu,  delivery_note_number, invoice_no, po_number, invoice_date, invoice_amount, invoice_tax_amount, invoice_type, comment  = None, None, None, None, None, None, None, None, None
+        return sbu,  delivery_note_number, invoice_no, po_number, invoice_date, invoice_amount, invoice_tax_amount, invoice_type, comment
     else:
         print(f"Error in OpenAI API response: {response.status_code} - {response.text}")
         return None, None
@@ -115,6 +116,7 @@ def process_files(batch_files):
         Invoice Date,
         Invoice Amount,
         Invoice Tax Amount,
+        Delivery note number,
         from the image and return the response as a JSON object with
         'sbu'
         'invoice_type',
@@ -123,41 +125,51 @@ def process_files(batch_files):
         'invoice_date',
         'invoice_amount',
         'invoice_tax_amount',
+        'delivery_note_number',
         'comment'
          as keys.
 
-    must retun json object only no more any text provide
+    must return json object only no more any text provide
+
+
+    1.Invoice Type
     When considering the Invoice type should follow below details:
 
-    1. For Tax Invoices:
-        a. Tax Invoice as the header
-        b. Words like VAT/TAX present in the invoice
-        c. VAT Amount > 0 (≠ null)
-        d VAT % > 0 (≠ null)
-        e. Subtotal ≠ Invoice Amount
+      1.1 For Tax Invoices:
+       
+        a. VAT Amount > 0 (≠ null)
+        b. VAT % > 0 (≠ null)
+        c. Subtotal ≠ Invoice Amount
 
-        Consider as a tax invoice if the pair c – d – e is valid.
+        Consider as a tax invoice if the pair a – b – c is valid.
 
-    2. For Non-Tax Invoices:
-        a Should come without the headings Tax Invoices sans Tax. VAT – but some invoices come with those words where they should be treated as Non-tax and the later T=0 code will be applied after correct identification with SAP integration
-        b VAT amount = 0
-        c VAT % = 0
-        d Subtotal = Invoice Amount
+        
 
-    Consider as a non-tax invoice if the pair b – c – d is valid.
+       1.2. For Non-Tax Invoices:
+        
+        a. VAT amount = 0
+        b. VAT % = 0
+        c. Subtotal = Invoice Amount
 
-    3. For SVAT Invoices:
-        a. Words like SVAT mentioned in the invoice
-        b. SVAT %
-        c. SVAT amount
-        d. Suspended VAT
-        c. Total amount
+        Consider as a non-tax invoice if the pair a – b – c is valid.
 
-        Logic to recognize if this is an SVAT:
-        - C (VAT Amount) is not null
-        - B (VAT %) is not null
+       1.3. For SVAT Invoices:
+        a. SVAT % > 0 (≠ null)
+        b. SVAT amount > 0 (≠ null)
+       
+        Consider as a SVAT invoice if a & b is valid 
 
-    4.1 PO number validation
+        alternative names for SVAT are:
+            Suspended Vat
+            Suspended Tax
+
+    2. PO Number        
+
+    When considering the PO number should follow below details:
+
+    PO numbers typically contain 10 digits.
+
+      2.1. PO number validation
         Extract the accurate PO number from the invoice.
         Consider alternative names such as:
             PO number
@@ -169,11 +181,14 @@ def process_files(batch_files):
             Customer PO
             Cust. PO No
             Manual No
-        PO numbers typically contain 10 digits.
+            Order Ref
+       
+            
+       
         Identify the SBU (Strategic Business Unit) based on the PO range once the PO number is extracted.
         Extract the SBU/company name from the address and tag it to the relevant PO category.
     
-    4.2 Data Praises:
+      2.2. Data Praises:
 
         The following are the SBU, company name, and PO range information:
 
@@ -186,26 +201,77 @@ def process_files(batch_files):
             SBU: C700, Company: CBL Cocos (PVT) LTD, Address: Alawwa, PO range: 1710000001 - 1759999999
             SBU: C800, Company: CBL Global Foods (PVT) LTD, Address: Alawwa, PO range: 1810000001 -- 1869999999
 
-    4.3 Failure Attributes:
+      2.3. Failure Attributes:
 
         If the PO number is out of range, data praise the 1st digit according to the SBU PO range.
         If the extracted PO number mismatches the defined PO range even after data praising, mark as "Wrong PO".
         If the PO number has <= 7 digits, mark as "Wrong PO".
         Else, mark as "Wrong PO".
     
-    5. Ensure the above structure thoroughly it's essential always.
+      2.4. Ensure the above structure thoroughly it's essential always.
 
-    Ensure that all currency values are converted to a standard format ISO 4217, default value LKR, also base on supplier address and supplier phone number.
+    3. Delivery Note Number Validation
+    
+    when considering the 'Delivery note number' should follow below details:
+    Extract the accurate Delivery note number from the invoice.
+        Consider alternative names such as:
+            Delivery note number
+            Dispatch note number
+            DO Number
+            AOD
+            Delivery order Number
+            DN Number
+            Advise No
+            Delivery note number ≠ Job No
+    
 
+    4. Currency
+    Ensure that all currency values are converted to a standard format ISO 4217, also base on country of supplier address and country code of supplier phone number, default value LKR.
+
+    
     Ensure the  Telephone Number is formatted as ISO standard phone number format (e.g., +94123456789).
 
+    5. Invoice Date
     The invoice date format should be DD/MM/YYYY, correcting the month to the most recent if unclear but not future-dating.
-
+ 
+    6. Invoice Amount
     'Invoice Amount' and 'Invoice Tax Amount' retun must be with two decimal places.
 
-    If any value is missing, set it to null only.
+    'Invoice Amount' Consider alternative names such as:
+        Invoive amount
+        Invoice value
+        Grand Total	
+        Total Amount
+        lnvoice Total
+        Gross Value
 
-    If any detail is unclear or not sure, please specify an error as an 'comment' in the JSON object. If no error is found, set it to Null.
+     7. Invoice Number
+    'Invoice No' Consider alternative names such as:
+        Invoice No
+        Invoice number	
+        Invoice Ref
+        Invoice Reference
+        Our reference No
+    
+    8. VAT Amount
+    'VAT Amount' Consider alternative names such as:
+        VAT	Tax	
+        Tax amount
+
+    9. Sub Total
+    'Sub Total' Consider alternative names such as:
+        Net total
+        Total	
+        Total amount	
+        Amount	
+        Balance/ amount due	
+        Invoice value  
+        Sub Total ≠ Gross Total
+
+General Rules
+If any value is missing, set it to null only.
+
+If any detail is unclear or not sure, please specify an error as an 'comment' in the JSON object. If no error is found, set it to Null.
     '''
     for file_name in batch_files:
         src_path = os.path.join(base_folder, file_name)
@@ -220,8 +286,8 @@ def process_files(batch_files):
 
         for image in images:
             base64_image = encode_image_to_base64(image)
-            sbu, invoice_type, invoice_no, po_number, invoice_date, invoice_amount, invoice_tax_amount, comment = get_openai_response(base64_image,prompt)
-            if sbu or invoice_type or invoice_no or po_number  or invoice_date or invoice_amount or invoice_tax_amount:
+            sbu, invoice_type, invoice_no, po_number, invoice_date, invoice_amount, invoice_tax_amount, delivery_note_number, comment = get_openai_response(base64_image,prompt)
+            if sbu or invoice_type or invoice_no or po_number  or invoice_date or invoice_amount or invoice_tax_amount or delivery_note_number:
             
                 desired_output = {
                     "sbu": sbu,
@@ -231,6 +297,7 @@ def process_files(batch_files):
                     "invoice_date": invoice_date,
                     "invoice_amount": invoice_amount,
                     "invoice_tax_amount": invoice_tax_amount,
+                    "delivery_note_number": delivery_note_number,
                     "comment": comment,
                     "filename": None
                 }
@@ -251,4 +318,4 @@ while True:
     if batch_files:
         process_files(batch_files)
 
-    time.sleep(5)  # Wait before checking for new files
+    time.sleep(8)  # Wait before checking for new files
