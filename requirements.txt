@@ -1,0 +1,7 @@
+pandas
+pdf2image
+pillow
+python-dotenv
+requests
+thefuzz
+
