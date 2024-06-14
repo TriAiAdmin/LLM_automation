@@ -158,11 +158,15 @@ def create_json_output(path_pdf, prompt, sbu_mapping_table):
     invoice_amount = convert_string_to_amount(invoice_amount)
     sub_total = convert_string_to_amount(sub_total)
 
+    overall_tax = 0
+    
     invoice_type = 'Non-Tax Invoice'
     if suspended_tax_amount > 0:
         invoice_type = 'SVAT Invoice'
+        overall_tax = suspended_tax_amount
     elif vat_amount > 0:
         invoice_type = 'Tax Invoice'
+        overall_tax = vat_amount
 
     validated_po_number, cleaned_po_num, sbu = convert_po_num_to_list(po_number, sbu_mapping_table)
     
@@ -175,13 +179,14 @@ def create_json_output(path_pdf, prompt, sbu_mapping_table):
             
             "suspended_tax_amount": suspended_tax_amount,
             "vat_amount": vat_amount,
+            "tax_amount": overall_tax,
             "delivery_note_number": delivery_note_number,
             
             "invoice_amount": invoice_amount,            
             "invoice_no": invoice_no,
             "sub_total": sub_total,
-            
             "invoice_type": invoice_type,
+            
             "sbu": sbu
         }
         formatted_json = json.dumps(desired_output, indent=4)
