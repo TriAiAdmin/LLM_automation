@@ -57,7 +57,6 @@ def get_openai_response(base64_image,prompt):
 
         raw_json = response_json['choices'][0]['message']['content']
         response_text = raw_json.replace("json", "").replace("```", "").strip()
-        # print(response_text)
         try:
             response_data = json.loads(response_text)
 
@@ -74,7 +73,6 @@ def get_openai_response(base64_image,prompt):
             sub_total = response_data.get('sub_total')
             
         except json.JSONDecodeError as e:
-            print(e)
             (
                 invoice_date, currency, po_number,
                 suspended_tax_amount, vat_amount, delivery_note_number,
@@ -90,7 +88,6 @@ def get_openai_response(base64_image,prompt):
                 invoice_amount, invoice_no, sub_total,
             )
     else:
-        print(f"Error in OpenAI API response: {response.status_code} - {response.text}")
         return (
                 None, None, None, 
                 None, None, None, 
@@ -137,7 +134,6 @@ def convert_po_num_to_list(po_num, sbu_mapping_table):
                 else:
                     validated_po_num.append('wrong po incorrect sbu')
             except Exception as e:
-                print(e)
                 validated_po_num.append('wrong po non_integer')
         else: 
             validated_po_num.append('wrong po')
@@ -194,7 +190,27 @@ def create_json_output(path_pdf, prompt, sbu_mapping_table):
 
 prompt = '''Extract the following details from the invoice:
         Invoice Date,
-        Currency Type,
+        Currency Type,output_dc = {}
+for i in batch_files:
+    try:
+        outcome = create_json_output(os.path.join(base_folder, i), prompt, sbu_mapping)
+        if outcome is not None:
+            output_dc[i] = outcome
+            print('processed', i)
+        else:
+            print('error : ', i)
+        break
+    except:
+        print('error : ', i)
+
+select_columns = [
+    'invoice_no', 'invoice_date', 'invoice_type', 'sbu', 
+    'po_number', 'validate_po_number','delivery_note_number', 'sub_total', 
+    'tax_amount', 'invoice_amount'
+]
+
+df_abc = pd.DataFrame.from_dict(output_dc, orient='index').reset_index().rename(columns={'index': 'filename'})
+df_abc[select_columns].to_excel(os.path.join(output_folder, "output {}.xlsx".format(invoice_folder_name)), index=False)
         PO Number,
         Suspended Tax Amount,
         Vat Amount,
@@ -424,19 +440,19 @@ for i in batch_files:
         outcome = create_json_output(os.path.join(base_folder, i), prompt, sbu_mapping)
         if outcome is not None:
             output_dc[i] = outcome
+            print('processed', i)
         else:
             print('error : ', i)
+        break
     except:
         print('error : ', i)
 
 select_columns = [
     'invoice_no', 'invoice_date', 'invoice_type', 'sbu', 
-    'po_number', 'delivery_note_number', 'sub_total', 'tax_amount', 
-    'invoice_amount']
+    'po_number', 'validate_po_number','delivery_note_number', 'sub_total', 
+    'tax_amount', 'invoice_amount'
+]
 
 df_abc = pd.DataFrame.from_dict(output_dc, orient='index').reset_index().rename(columns={'index': 'filename'})
 df_abc[select_columns].to_excel(os.path.join(output_folder, "output {}.xlsx".format(invoice_folder_name)), index=False)
-
-
-
 
