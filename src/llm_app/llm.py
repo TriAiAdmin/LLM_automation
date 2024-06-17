@@ -443,7 +443,6 @@ for i in batch_files:
             print('processed', i)
         else:
             print('error : ', i)
-        break
     except:
         print('error : ', i)
 
