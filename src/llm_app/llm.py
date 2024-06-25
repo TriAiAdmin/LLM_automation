@@ -7,15 +7,17 @@ import io
 import requests
 import json
 import pandas as pd
+import time
 import argparse
+
 
 with open('../../key.txt', 'r') as file:
     secret_key = file.read().strip()
 os.environ['OPENAI_API_KEY'] = secret_key
 
 def convert_pdf_to_images(pdf_path):
-    return convert_from_path(pdf_path)[0]
-
+    return convert_from_path(pdf_path)
+    
 def encode_image_to_base64(image):
     if image.mode == 'RGBA':
         image = image.convert('RGB')
@@ -23,6 +25,10 @@ def encode_image_to_base64(image):
     image.save(buffered, format="JPEG")
     return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
+def resize_image(image, max_size=(510, 653)):
+    image.thumbnail(max_size, Image.LANCZOS)
+    return image
+    
 def get_openai_response(base64_image,prompt):
     headers = {
         "Content-Type": "application/json",
@@ -30,7 +36,7 @@ def get_openai_response(base64_image,prompt):
     }
     
     payload = {
-        "model": "gpt-4-turbo",
+        "model": "gpt-4o",
         "messages": [
             {
                 "role": "user",
@@ -48,7 +54,8 @@ def get_openai_response(base64_image,prompt):
                 ]
             }
         ],
-        "max_tokens": 400
+        "max_tokens": 400,
+        # "temperature": 0.2
     }
 
     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
@@ -57,6 +64,7 @@ def get_openai_response(base64_image,prompt):
 
         raw_json = response_json['choices'][0]['message']['content']
         response_text = raw_json.replace("json", "").replace("```", "").strip()
+        # print('gptOutput', response_text)
         try:
             response_data = json.loads(response_text)
 
@@ -88,35 +96,39 @@ def get_openai_response(base64_image,prompt):
                 invoice_amount, invoice_no, sub_total,
             )
     else:
-        return (
-                None, None, None, 
-                None, None, None, 
-                None, None, None, 
-            )
-
+        # print(response.json())
+        assert False 
+        # return (
+        #         None, None, None, 
+        #         None, None, None, 
+        #         None, None, None, 
+        #     )
+        
+        
 def convert_string_to_amount(value):
     try:
         converted_value = value.replace('\s', '').replace(',', '')
         return float(converted_value)
     except:
         return 0
-
+        
+        
 def get_sbu(mapping_dataset, value):
     _filtered_data = mapping_dataset[(mapping_dataset['min']<=value) & (mapping_dataset['max']>=value)]
     if len(_filtered_data)>=1:
         return list(_filtered_data['sbu'])[0]
     else:
         return None
-
+        
 def convert_po_number_to_int(value):
     return int(value)
-
+    
 def convert_po_num_to_list(po_num, sbu_mapping_table):
     validated_po_num = []
     cleaned_po_num = []
     sbu = None
     if (po_num == "null") or (po_num == "") or (po_num is None):
-        po_num = [""]
+        po_num = []
     
     if type(po_num) is not list:
         po_num = [po_num]
@@ -139,78 +151,93 @@ def convert_po_num_to_list(po_num, sbu_mapping_table):
             validated_po_num.append('wrong po')
 
     return validated_po_num, cleaned_po_num, sbu
-
-def create_json_output(path_pdf, prompt, sbu_mapping_table):
-    image_load = convert_pdf_to_images(path_pdf)
-    base64_image = encode_image_to_base64(image_load)
-    (
-        invoice_date, currency, po_number,
-        suspended_tax_amount, vat_amount, delivery_note_number,
-        invoice_amount, invoice_no, sub_total,
-    ) = get_openai_response(base64_image,prompt)
-
-    suspended_tax_amount = convert_string_to_amount(suspended_tax_amount)
-    vat_amount = convert_string_to_amount(vat_amount)
-    invoice_amount = convert_string_to_amount(invoice_amount)
-    sub_total = convert_string_to_amount(sub_total)
-
-    overall_tax = 0
     
-    invoice_type = 'Non-Tax Invoice'
-    if suspended_tax_amount > 0:
-        invoice_type = 'SVAT Invoice'
-        overall_tax = suspended_tax_amount
-    elif vat_amount > 0:
-        invoice_type = 'Tax Invoice'
-        overall_tax = vat_amount
-
-    validated_po_number, cleaned_po_num, sbu = convert_po_num_to_list(po_number, sbu_mapping_table)
+def create_json_output(path_pdf, prompt, sbu_mapping_table, image_resize=False):
+    image_load_all = convert_pdf_to_images(path_pdf)
+    final_cleaned_po_num = []
+    final_validated_po_number = []
+    final_invoice_date = ""
+    final_currency = ""
+    final_suspended_tax_amount = 0
+    final_vat_amount = 0
+    final_overall_tax = 0
+    final_delivery_note_number = ""
+    final_invoice_amount = 0
+    final_invoice_no = ""
+    final_sub_total = 0
+    final_invoice_type = ""
+    final_sbu = None
     
-    if invoice_no or po_number  or invoice_date or invoice_amount or delivery_note_number:
-        desired_output = {
-            "invoice_date": invoice_date,
-            "currency": currency,
-            "po_number": cleaned_po_num,
-            "validate_po_number": validated_po_number,
-            
-            "suspended_tax_amount": suspended_tax_amount,
-            "vat_amount": vat_amount,
-            "tax_amount": overall_tax,
-            "delivery_note_number": delivery_note_number,
-            
-            "invoice_amount": invoice_amount,            
-            "invoice_no": invoice_no,
-            "sub_total": sub_total,
-            "invoice_type": invoice_type,
-            
-            "sbu": sbu
-        }
-        formatted_json = json.dumps(desired_output, indent=4)
-        return desired_output
+    for image_load in image_load_all:
+        # print(image_load)
+        if image_resize:
+            image_load = resize_image(image_load)
+        base64_image = encode_image_to_base64(image_load)        
+        (
+            invoice_date, currency, po_number,
+            suspended_tax_amount, vat_amount, delivery_note_number,
+            invoice_amount, invoice_no, sub_total,
+        ) = get_openai_response(base64_image,prompt)
 
-prompt = '''Extract the following details from the invoice:
+        suspended_tax_amount = convert_string_to_amount(suspended_tax_amount)
+        vat_amount = convert_string_to_amount(vat_amount)
+        invoice_amount = convert_string_to_amount(invoice_amount)
+        sub_total = convert_string_to_amount(sub_total)
+    
+        overall_tax = 0
+        
+        invoice_type = 'Non-Tax Invoice'
+        if suspended_tax_amount > 0:
+            invoice_type = 'SVAT Invoice'
+            overall_tax = suspended_tax_amount
+        elif vat_amount > 0:
+            invoice_type = 'Tax Invoice'
+            overall_tax = vat_amount
+    
+        validated_po_number, cleaned_po_num, sbu = convert_po_num_to_list(po_number, sbu_mapping_table)
+        final_cleaned_po_num += cleaned_po_num
+        final_validated_po_number += validated_po_number
+
+        final_invoice_date = invoice_date
+        final_currency = currency
+        final_suspended_tax_amount = suspended_tax_amount
+        final_vat_amount = vat_amount
+        final_overall_tax = overall_tax
+        final_delivery_note_number = delivery_note_number
+        final_invoice_amount = invoice_amount
+        final_invoice_no = invoice_no
+        final_sub_total = sub_total
+        final_invoice_type = invoice_type
+        if sbu is not None:
+            final_sbu = sbu
+        # if len(image_load_all)>1:
+        #     time.sleep(30)
+        
+    
+    desired_output = {
+        "invoice_date": final_invoice_date,
+        "currency": final_currency,
+        "po_number": final_cleaned_po_num,
+        "validate_po_number": final_validated_po_number,
+        
+        "suspended_tax_amount": final_suspended_tax_amount,
+        "vat_amount": final_vat_amount,
+        "tax_amount": final_overall_tax,
+        "delivery_note_number": final_delivery_note_number,
+
+        "invoice_amount": final_invoice_amount,            
+        "invoice_no": final_invoice_no,
+        "sub_total": final_sub_total,
+        "invoice_type": final_invoice_type,
+        
+        "sbu": final_sbu
+    }
+    formatted_json = json.dumps(desired_output, indent=4)
+    return desired_output
+    
+base_prompt = '''Extract the following details from the invoice:
         Invoice Date,
-        Currency Type,output_dc = {}
-for i in batch_files:
-    try:
-        outcome = create_json_output(os.path.join(base_folder, i), prompt, sbu_mapping)
-        if outcome is not None:
-            output_dc[i] = outcome
-            print('processed', i)
-        else:
-            print('error : ', i)
-        break
-    except:
-        print('error : ', i)
-
-select_columns = [
-    'invoice_no', 'invoice_date', 'invoice_type', 'sbu', 
-    'po_number', 'validate_po_number','delivery_note_number', 'sub_total', 
-    'tax_amount', 'invoice_amount'
-]
-
-df_abc = pd.DataFrame.from_dict(output_dc, orient='index').reset_index().rename(columns={'index': 'filename'})
-df_abc[select_columns].to_excel(os.path.join(output_folder, "output {}.xlsx".format(invoice_folder_name)), index=False)
+        Currency Type,
         PO Number,
         Suspended Tax Amount,
         Vat Amount,
@@ -273,7 +300,7 @@ df_abc[select_columns].to_excel(os.path.join(output_folder, "output {}.xlsx".for
 
     3. PO Number
     
-        There could be multiple "PO Numbers".
+        There could be multiple "PO Numbers". And there should be at least one "PO Numbers"
         
         3.1 In the invoices, "PO Number" can be mentioned using various alternative names:
             "PO number"
@@ -286,13 +313,18 @@ df_abc[select_columns].to_excel(os.path.join(output_folder, "output {}.xlsx".for
             "Cust. PO No"
             "Manual No"
             "Order Ref"
+            "Cust VAT Reg."
+            "ORDER NO"
+
+        3.2 In the invoices, "PO Number" can not be mentioned using following names:
+            "W/O Number"
         
-        3.2 Once a "PO Number" is extracted, it should be validated based on the following criteria:
-            3a) It must contain 8 to 10 characters.
+        3.3 Once a "PO Number" is extracted, it should be validated based on the following criteria:
+            3a) PO number should contains more than 7 characters.
             3b) All characters of the "PO Number" should be digits.
-            If the extracted "PO Number" does not meet criteria 3a or 3b, it should be flagged as "wrong PO number".
+            3c) there should be at least one "PO Number".
         
-        3.3 Additionally, there are edge cases where the "PO Number" might have more than 10 characters, such as:
+        3.4 Additionally, there are edge cases where the "PO Number" might have more than 10 characters, such as:
             * 2341234562(1748)
             * 2341234562_1748
             * 2341234562 1748   
@@ -301,7 +333,7 @@ df_abc[select_columns].to_excel(os.path.join(output_folder, "output {}.xlsx".for
             In this example, the final output should be ["2341234562"]. 
         
         Requirement:
-            Identifies all "PO Numbers" based on the alternative names.
+            Identifies all "PO Number" s based on the alternative names.
             Check for the edge cases.
             Validates each extracted "PO Number" based on the criteria mentioned above.
             Data type of the "Invoice Amount" is str.
@@ -321,17 +353,32 @@ df_abc[select_columns].to_excel(os.path.join(output_folder, "output {}.xlsx".for
             Data type of the "Invoice Amount" is str.
 
     5. Vat Amount
-        Need to extract the "Vat" amount. Note that the "Vat" can also be referred to as "Tax". 
+        Need to extract the "Vat" amount.
+
+        The "Vat" can be referred to using different terms, including but not limited to:
+            "Tax"
+            "VAT"
+            "TAX"
+            "VAT 18%"
         
         Follow these conditions:
             The "Vat" amount should be a numerical value, which can include decimal points.
             If the invoice does not have a "Vat" amount, the default value should be 0.
+
+        Edge Cases:
+            If the text "VAT" is followed by two numbers separated by a space (e.g., "VAT 18 12347680"), the second number is the VAT amount.
+            example:
+                Text :
+                    VAT 18.00 12347680
+                Output : 
+                    12347680
 
         Additional Instructions:
             Ensure to search for all possible synonyms ("Vat", "Tax").
             Accurately extract the numerical value associated with these terms.
             If none of these terms are found or if no numerical value is associated with them, set the "vat_amount" to 0.
             Data type of the "Invoice Amount" is str.
+
 
     6. Invoice Amount
         Need to extract the "Invoice Amount" from the invoice. 
@@ -416,16 +463,50 @@ df_abc[select_columns].to_excel(os.path.join(output_folder, "output {}.xlsx".for
 General Rules
 If any value is missing, set it to null only.
     '''
+    
+def load_examples(example_folder, example_json_path):
+    examples = []
+    with open(example_json_path, 'r') as file:
+        example_outputs = json.load(file)
+    
+    for filename in os.listdir(example_folder):
+        if filename.endswith(('.pdf', '.png', '.jpg', '.jpeg')):
+            pdf_path = os.path.join(example_folder, filename)
+            images = convert_pdf_to_images(pdf_path)
+            for image in images:
+                resized_image = resize_image(image)
+                base64_image = encode_image_to_base64(resized_image)
+                if filename in example_outputs:
+                    examples.append({
+                        "input": base64_image,
+                        "output": example_outputs[filename]
+                    })
+    return examples
 
-parser = argparse.ArgumentParser(description='activity')
-parser.add_argument('file_name', type=str, help='pdf file name')
-args = parser.parse_args()
-
+def create_few_shot_prompt(examples, base_prompt):
+    few_shot_prompt = base_prompt + "\n\n"
+    for example in examples:
+        few_shot_prompt += "Example Input (base64 image): {}\n".format(example['input'])
+        few_shot_prompt += "Example Output (JSON): {}\n\n".format(json.dumps(example['output'], indent=4))
+    return few_shot_prompt
+    
+    
 base_location = "../../"
 sbu_mapping = (
     pd.read_csv(os.path.join(base_location,'conf', 'sbu_type.csv'))
 )
 sbu_mapping[['min', 'max']] = sbu_mapping[['min', 'max']].apply(pd.to_numeric)
+
+invoice_folder_name = 'pdf'
+example_json_path = os.path.join(base_location, 'data', 'example', "example_output.json")
+example_folder = os.path.join(base_location, 'data', 'example', "pdf")
+examples = load_examples(example_folder, example_json_path)
+prompt = create_few_shot_prompt(examples, base_prompt)
+
+parser = argparse.ArgumentParser(description='activity')
+parser.add_argument('file_name', type=str, help='pdf file name')
+args = parser.parse_args()
+
 
 invoice_folder_name = args.file_name
 base_folder = os.path.join(base_location, 'data', invoice_folder_name)
@@ -454,4 +535,5 @@ select_columns = [
 
 df_abc = pd.DataFrame.from_dict(output_dc, orient='index').reset_index().rename(columns={'index': 'filename'})
 df_abc[select_columns].to_excel(os.path.join(output_folder, "output {}.xlsx".format(invoice_folder_name)), index=False)
+
 
