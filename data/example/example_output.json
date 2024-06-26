@@ -1,13 +1,13 @@
 {
-    "multiple_po_numbers.pdf": {
-		"invoice_date": "12/03/2024",
-		"currency": "USD",
-		"po_number": ["7100075866", "7100075434", "7100075244", "7100075235"],
+    "multiple_po_numbers1.pdf": {
+		"invoice_date": "30/03/2024",
+		"currency": "LKR",
+		"po_number": ["7100071981", "7100071986"],
 		"suspended_tax_amount": 0,
-		"vat_amount": 0,
-		"delivery_note_number": "327476,60,505,475,506",
-		"invoice_amount": 0,
-		"invoice_no": "IN23L13183",
-		"sub_total": 0
+		"vat_amount": "213,101.33",
+		"delivery_note_number": "329228,224,223,230,44",
+		"invoice_amount": "1,1396,997.63",
+		"invoice_no": "IN23L13618",
+		"sub_total": "1183896.30"
     }
 }

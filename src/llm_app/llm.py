@@ -2,7 +2,7 @@ import shutil
 import os
 import base64
 from pdf2image import convert_from_path
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageOps
 import io
 import requests
 import json
@@ -10,14 +10,13 @@ import pandas as pd
 import time
 import argparse
 
-
 with open('../../key.txt', 'r') as file:
     secret_key = file.read().strip()
 os.environ['OPENAI_API_KEY'] = secret_key
 
 def convert_pdf_to_images(pdf_path):
     return convert_from_path(pdf_path)
-    
+
 def encode_image_to_base64(image):
     if image.mode == 'RGBA':
         image = image.convert('RGB')
@@ -25,10 +24,30 @@ def encode_image_to_base64(image):
     image.save(buffered, format="JPEG")
     return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
+# def resize_image(image, max_size=(510, 653)):
+#     image.thumbnail(max_size, Image.LANCZOS)
+#     return image
+
 def resize_image(image, max_size=(510, 653)):
+    # Resize image
+    # max_size = (800, 800)
     image.thumbnail(max_size, Image.LANCZOS)
+
+    # Convert to grayscale
+    image = ImageOps.grayscale(image)
+
+    # # Enhance image
+    # enhancer = ImageEnhance.Contrast(image)
+    # image = enhancer.enhance(2)
+
+    # enhancer = ImageEnhance.Brightness(image)
+    # image = enhancer.enhance(1.5)
+
+    # enhancer = ImageEnhance.Sharpness(image)
+    # image = enhancer.enhance(2)
+
     return image
-    
+
 def get_openai_response(base64_image,prompt):
     headers = {
         "Content-Type": "application/json",
@@ -97,32 +116,25 @@ def get_openai_response(base64_image,prompt):
             )
     else:
         # print(response.json())
-        assert False 
-        # return (
-        #         None, None, None, 
-        #         None, None, None, 
-        #         None, None, None, 
-        #     )
-        
-        
+        assert False
+
 def convert_string_to_amount(value):
     try:
         converted_value = value.replace('\s', '').replace(',', '')
         return float(converted_value)
     except:
         return 0
-        
-        
+
 def get_sbu(mapping_dataset, value):
     _filtered_data = mapping_dataset[(mapping_dataset['min']<=value) & (mapping_dataset['max']>=value)]
     if len(_filtered_data)>=1:
         return list(_filtered_data['sbu'])[0]
     else:
         return None
-        
+
 def convert_po_number_to_int(value):
     return int(value)
-    
+
 def convert_po_num_to_list(po_num, sbu_mapping_table):
     validated_po_num = []
     cleaned_po_num = []
@@ -151,7 +163,7 @@ def convert_po_num_to_list(po_num, sbu_mapping_table):
             validated_po_num.append('wrong po')
 
     return validated_po_num, cleaned_po_num, sbu
-    
+
 def create_json_output(path_pdf, prompt, sbu_mapping_table, image_resize=False):
     image_load_all = convert_pdf_to_images(path_pdf)
     final_cleaned_po_num = []
@@ -234,6 +246,34 @@ def create_json_output(path_pdf, prompt, sbu_mapping_table, image_resize=False):
     }
     formatted_json = json.dumps(desired_output, indent=4)
     return desired_output
+
+def load_examples(example_folder, example_json_path, image_resize):
+    examples = []
+    with open(example_json_path, 'r') as file:
+        example_outputs = json.load(file)
+    
+    for filename in os.listdir(example_folder):
+        if filename.endswith(('.pdf', '.png', '.jpg', '.jpeg')):
+            pdf_path = os.path.join(example_folder, filename)
+            images = convert_pdf_to_images(pdf_path)
+            for image in images:
+                if image_resize:
+                    image = resize_image(image)
+                base64_image = encode_image_to_base64(image)
+                if filename in example_outputs:
+                    examples.append({
+                        "input": base64_image,
+                        "output": example_outputs[filename]
+                    })
+        break
+    return examples
+
+def create_few_shot_prompt(examples, base_prompt):
+    few_shot_prompt = base_prompt + "\n\n"
+    for example in examples:
+        few_shot_prompt += "Example Input (base64 image): {}\n".format(example['input'])
+        few_shot_prompt += "Example Output (JSON): {}\n\n".format(json.dumps(example['output'], indent=4))
+    return few_shot_prompt
     
 base_prompt = '''Extract the following details from the invoice:
         Invoice Date,
@@ -464,68 +504,59 @@ General Rules
 If any value is missing, set it to null only.
     '''
     
-def load_examples(example_folder, example_json_path):
-    examples = []
-    with open(example_json_path, 'r') as file:
-        example_outputs = json.load(file)
-    
-    for filename in os.listdir(example_folder):
-        if filename.endswith(('.pdf', '.png', '.jpg', '.jpeg')):
-            pdf_path = os.path.join(example_folder, filename)
-            images = convert_pdf_to_images(pdf_path)
-            for image in images:
-                resized_image = resize_image(image)
-                base64_image = encode_image_to_base64(resized_image)
-                if filename in example_outputs:
-                    examples.append({
-                        "input": base64_image,
-                        "output": example_outputs[filename]
-                    })
-    return examples
-
-def create_few_shot_prompt(examples, base_prompt):
-    few_shot_prompt = base_prompt + "\n\n"
-    for example in examples:
-        few_shot_prompt += "Example Input (base64 image): {}\n".format(example['input'])
-        few_shot_prompt += "Example Output (JSON): {}\n\n".format(json.dumps(example['output'], indent=4))
-    return few_shot_prompt
-    
-    
 base_location = "../../"
+image_resize=True
 sbu_mapping = (
     pd.read_csv(os.path.join(base_location,'conf', 'sbu_type.csv'))
 )
 sbu_mapping[['min', 'max']] = sbu_mapping[['min', 'max']].apply(pd.to_numeric)
 
-invoice_folder_name = 'pdf'
 example_json_path = os.path.join(base_location, 'data', 'example', "example_output.json")
 example_folder = os.path.join(base_location, 'data', 'example', "pdf")
-examples = load_examples(example_folder, example_json_path)
+examples = load_examples(example_folder, example_json_path, image_resize)
 prompt = create_few_shot_prompt(examples, base_prompt)
+
 
 parser = argparse.ArgumentParser(description='activity')
 parser.add_argument('file_name', type=str, help='pdf file name')
 args = parser.parse_args()
-
-
 invoice_folder_name = args.file_name
+
+base_location = "../../"
+image_resize=True
+is_example=True
+sbu_mapping = (
+    pd.read_csv(os.path.join(base_location,'conf', 'sbu_type.csv'))
+)
+sbu_mapping[['min', 'max']] = sbu_mapping[['min', 'max']].apply(pd.to_numeric)
+
+example_json_path = os.path.join(base_location, 'data', 'example', "example_output.json")
+example_folder = os.path.join(base_location, 'data', 'example', "pdf")
+examples = load_examples(example_folder, example_json_path, image_resize)
+
+prompt = base_prompt
+if is_example:
+    prompt = create_few_shot_prompt(examples, base_prompt)
+    
+invoice_folder_name = 'multiple pages'
 base_folder = os.path.join(base_location, 'data', invoice_folder_name)
 output_folder = os.path.join(base_location, 'data')
 
 all_files = [f for f in os.listdir(base_folder) if os.path.isfile(os.path.join(base_folder, f))]
 batch_files = [f for f in all_files if f.endswith(('.pdf', '.png', '.jpg', '.jpeg'))]
+batch_files
 
 output_dc = {}
 for i in batch_files:
     try:
-        outcome = create_json_output(os.path.join(base_folder, i), prompt, sbu_mapping)
+        outcome = create_json_output(os.path.join(base_folder, i), prompt, sbu_mapping, image_resize)
         if outcome is not None:
             output_dc[i] = outcome
             print('processed', i)
         else:
             print('error : ', i)
-    except:
-        print('error : ', i)
+    except Exception as e:
+        print('error : ', i, e)
 
 select_columns = [
     'invoice_no', 'invoice_date', 'invoice_type', 'sbu', 
@@ -534,6 +565,4 @@ select_columns = [
 ]
 
 df_abc = pd.DataFrame.from_dict(output_dc, orient='index').reset_index().rename(columns={'index': 'filename'})
-df_abc[select_columns].to_excel(os.path.join(output_folder, "output {}.xlsx".format(invoice_folder_name)), index=False)
-
-
+df_abc[select_columns].to_excel(os.path.join(output_folder, "output {}.xlsx".format(invoice_folder_name)), index=True)
