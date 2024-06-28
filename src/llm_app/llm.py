@@ -538,7 +538,6 @@ prompt = base_prompt
 if is_example:
     prompt = create_few_shot_prompt(examples, base_prompt)
     
-invoice_folder_name = 'multiple pages'
 base_folder = os.path.join(base_location, 'data', invoice_folder_name)
 output_folder = os.path.join(base_location, 'data')
 
