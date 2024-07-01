@@ -154,7 +154,7 @@ def convert_po_num_to_list(po_num, sbu_mapping_table):
                 _po_num = convert_po_number_to_int(_po_num)
                 _sbu = get_sbu(sbu_mapping_table, _po_num)
                 if _sbu is not None:
-                    validated_po_num.append(_po_num)
+                    validated_po_num.append('correct')
                     sbu = _sbu
                 else:
                     validated_po_num.append('wrong po incorrect sbu')
@@ -547,7 +547,7 @@ sbu_mapping[['min', 'max']] = sbu_mapping[['min', 'max']].apply(pd.to_numeric)
 
 prompt = base_prompt
 
-invoice_folder_name = 'multiple pages 1'
+#invoice_folder_name = 'multiple pages 1'
 
 parser = argparse.ArgumentParser(description='activity')
 parser.add_argument('file_name', type=str, help='pdf file name')
