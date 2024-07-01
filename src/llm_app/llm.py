@@ -510,20 +510,13 @@ args = parser.parse_args()
 invoice_folder_name = args.file_name
 
 base_location = "../../"
-image_resize=True
-is_example=False
+image_resize = True
 sbu_mapping = (
     pd.read_csv(os.path.join(base_location,'conf', 'sbu_type.csv'))
 )
 sbu_mapping[['min', 'max']] = sbu_mapping[['min', 'max']].apply(pd.to_numeric)
 
-example_json_path = os.path.join(base_location, 'data', 'example', "example_output.json")
-example_folder = os.path.join(base_location, 'data', 'example', "pdf")
-examples = load_examples(example_folder, example_json_path, image_resize)
-
 prompt = base_prompt
-if is_example:
-    prompt = create_few_shot_prompt(examples, base_prompt)
    
 base_folder = os.path.join(base_location, 'data', invoice_folder_name)
 output_folder = os.path.join(base_location, 'data')
