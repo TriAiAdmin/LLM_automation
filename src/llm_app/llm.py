@@ -97,6 +97,7 @@ def get_openai_response(base64_image,prompt):
             invoice_amount = response_data.get('invoice_amount')
             invoice_no = response_data.get('invoice_no')
             sub_total = response_data.get('sub_total')
+            sbu_address = response_data.get('sbu_address')
             
         except json.JSONDecodeError as e:
             (
@@ -107,11 +108,12 @@ def get_openai_response(base64_image,prompt):
                 None, None, None, 
                 None, None, None, 
                 None, None, None, 
+                None
             )
         return (
                 invoice_date, currency, po_number,
                 suspended_tax_amount, vat_amount, delivery_note_number,
-                invoice_amount, invoice_no, sub_total,
+                invoice_amount, invoice_no, sub_total, sbu_address
             )
     else:
         print(response.json())
@@ -178,6 +180,7 @@ def create_json_output(path_pdf, prompt, sbu_mapping_table, image_resize=False):
     final_sub_total = 0
     final_invoice_type = ""
     final_sbu = None
+    final_sub = ""
     
     for image_load in image_load_all:
         # print(image_load)
@@ -187,7 +190,7 @@ def create_json_output(path_pdf, prompt, sbu_mapping_table, image_resize=False):
         (
             invoice_date, currency, po_number,
             suspended_tax_amount, vat_amount, delivery_note_number,
-            invoice_amount, invoice_no, sub_total,
+            invoice_amount, invoice_no, sub_total, sbu_address
         ) = get_openai_response(base64_image,prompt)
 
         suspended_tax_amount = convert_string_to_amount(suspended_tax_amount)
@@ -221,6 +224,8 @@ def create_json_output(path_pdf, prompt, sbu_mapping_table, image_resize=False):
         final_invoice_type = invoice_type
         if sbu is not None:
             final_sbu = sbu
+        if sbu_address is not None:
+            final_sub = sbu_address
         # if len(image_load_all)>1:
         #     time.sleep(30)
         
@@ -241,7 +246,8 @@ def create_json_output(path_pdf, prompt, sbu_mapping_table, image_resize=False):
         "sub_total": final_sub_total,
         "invoice_type": final_invoice_type,
         
-        "sbu": final_sbu
+        "sbu": final_sbu,
+        "sbu_address" : final_sub
     }
     formatted_json = json.dumps(desired_output, indent=4)
     return desired_output
@@ -273,7 +279,8 @@ def create_few_shot_prompt(examples, base_prompt):
         few_shot_prompt += "Example Input (base64 image): {}\n".format(example['input'])
         few_shot_prompt += "Example Output (JSON): {}\n\n".format(json.dumps(example['output'], indent=4))
     return few_shot_prompt
-    
+
+
 base_prompt = '''Extract the following details from the invoice:
         Invoice Date,
         Currency Type,
@@ -283,7 +290,8 @@ base_prompt = '''Extract the following details from the invoice:
         Delivery Note Number Validation,
         Invoice Amount,
         Invoice Number,
-        Sub Total
+        Sub Total,
+        SBU Address
         from the image and return the response as a JSON object with
         'invoice_date'
         'currency',
@@ -294,6 +302,7 @@ base_prompt = '''Extract the following details from the invoice:
         'invoice_amount',
         'invoice_no',
         'sub_total',
+        'sbu_address'
          as keys.
 
     must return json object only no more any text provide
@@ -499,31 +508,58 @@ base_prompt = '''Extract the following details from the invoice:
             Invoice Reference
             Our reference No
 
+     10. SBU Address
+        Extract the corresponding code based on the provided company name or part of the address.
+
+            Input Data:
+                C100: Ceylon Biscuit Limited, Makumbura, Pannipitiya
+                C200: CBL Food International (PVT) Limited, Ranala
+                C300: Convenience Food (PVT) LTD, Kandawala, Ratmalana
+                C400: CBL Plenty Foods (PVT) LTD, Ratmalana
+                C500: CBL Exports (PVT) LTD, Seethawaka
+                C600: CBL Natural Foods (PVT) LTD, Minuwangoda
+                C700: CBL Cocos (PVT) LTD, Alawwa
+                C800: CBL Global Foods (PVT) LTD, Alawwa
+    
+            Examples:
+                1. Input: "Ceylon Biscuit Limited"
+                   Output: "C100"
+                
+                2. Input: "Ranala"
+                   Output: "C200"
+                
+                3. Input: "Kandawala"
+                   Output: "C300"
+                
+                4. Input: "Minuwangoda"
+                   Output: "C600"
+        
 General Rules
 If any value is missing, set it to null only.
     '''
 
-
-parser = argparse.ArgumentParser(description='activity')
-parser.add_argument('file_name', type=str, help='pdf file name')
-args = parser.parse_args()
-invoice_folder_name = args.file_name
-
 base_location = "../../"
-image_resize = True
+image_resize=True
 sbu_mapping = (
     pd.read_csv(os.path.join(base_location,'conf', 'sbu_type.csv'))
 )
 sbu_mapping[['min', 'max']] = sbu_mapping[['min', 'max']].apply(pd.to_numeric)
 
 prompt = base_prompt
-   
+
+invoice_folder_name = 'multiple pages 1'
+
+parser = argparse.ArgumentParser(description='activity')
+parser.add_argument('file_name', type=str, help='pdf file name')
+args = parser.parse_args()
+invoice_folder_name = args.file_name
+
 base_folder = os.path.join(base_location, 'data', invoice_folder_name)
 output_folder = os.path.join(base_location, 'data')
 
 all_files = [f for f in os.listdir(base_folder) if os.path.isfile(os.path.join(base_folder, f))]
 batch_files = [f for f in all_files if f.endswith(('.pdf', '.png', '.jpg', '.jpeg'))]
-
+batch_files
 
 output_dc = {}
 for i in batch_files:
@@ -540,7 +576,7 @@ for i in batch_files:
 select_columns = [
     'invoice_no', 'invoice_date', 'invoice_type', 'sbu', 
     'po_number', 'validate_po_number','delivery_note_number', 'sub_total', 
-    'tax_amount', 'invoice_amount', 'filename'
+    'tax_amount', 'invoice_amount', 'filename', 'sbu_address'
 ]
 
 df_abc = pd.DataFrame.from_dict(output_dc, orient='index').reset_index().rename(columns={'index': 'filename'})
