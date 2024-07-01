@@ -30,8 +30,7 @@ def encode_image_to_base64(image):
 
 def resize_image(image, max_size=(510, 653)):
     # Resize image
-    # max_size = (800, 800)
-    image.thumbnail(max_size, Image.LANCZOS)
+    # image.thumbnail(max_size, Image.LANCZOS)
 
     # Convert to grayscale
     image = ImageOps.grayscale(image)
@@ -115,7 +114,7 @@ def get_openai_response(base64_image,prompt):
                 invoice_amount, invoice_no, sub_total,
             )
     else:
-        # print(response.json())
+        print(response.json())
         assert False
 
 def convert_string_to_amount(value):
@@ -503,18 +502,6 @@ base_prompt = '''Extract the following details from the invoice:
 General Rules
 If any value is missing, set it to null only.
     '''
-    
-base_location = "../../"
-image_resize=True
-sbu_mapping = (
-    pd.read_csv(os.path.join(base_location,'conf', 'sbu_type.csv'))
-)
-sbu_mapping[['min', 'max']] = sbu_mapping[['min', 'max']].apply(pd.to_numeric)
-
-example_json_path = os.path.join(base_location, 'data', 'example', "example_output.json")
-example_folder = os.path.join(base_location, 'data', 'example', "pdf")
-examples = load_examples(example_folder, example_json_path, image_resize)
-prompt = create_few_shot_prompt(examples, base_prompt)
 
 
 parser = argparse.ArgumentParser(description='activity')
@@ -524,7 +511,7 @@ invoice_folder_name = args.file_name
 
 base_location = "../../"
 image_resize=True
-is_example=True
+is_example=False
 sbu_mapping = (
     pd.read_csv(os.path.join(base_location,'conf', 'sbu_type.csv'))
 )
@@ -537,13 +524,13 @@ examples = load_examples(example_folder, example_json_path, image_resize)
 prompt = base_prompt
 if is_example:
     prompt = create_few_shot_prompt(examples, base_prompt)
-    
+   
 base_folder = os.path.join(base_location, 'data', invoice_folder_name)
 output_folder = os.path.join(base_location, 'data')
 
 all_files = [f for f in os.listdir(base_folder) if os.path.isfile(os.path.join(base_folder, f))]
 batch_files = [f for f in all_files if f.endswith(('.pdf', '.png', '.jpg', '.jpeg'))]
-batch_files
+
 
 output_dc = {}
 for i in batch_files:
