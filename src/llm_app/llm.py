@@ -576,7 +576,7 @@ for i in batch_files:
 select_columns = [
     'invoice_no', 'invoice_date', 'invoice_type', 'sbu', 
     'po_number', 'validate_po_number','delivery_note_number', 'sub_total', 
-    'tax_amount', 'invoice_amount', 'filename', 'sbu_address'
+    'tax_amount', 'invoice_amount', 'filename', 'sbu_address', 'currency'
 ]
 
 df_abc = pd.DataFrame.from_dict(output_dc, orient='index').reset_index().rename(columns={'index': 'filename'})
