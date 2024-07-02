@@ -499,6 +499,7 @@ base_prompt = '''Extract the following details from the invoice:
                 DN Number
                 Advise No
                 Delivery note number ≠ Job No
+                AD
             
      9. Invoice Number
         'Invoice No' Consider alternative names such as:
@@ -507,6 +508,7 @@ base_prompt = '''Extract the following details from the invoice:
             Invoice Ref
             Invoice Reference
             Our reference No
+            Bill No
 
      10. SBU Address
         Extract the corresponding code based on the provided company name or part of the address.
