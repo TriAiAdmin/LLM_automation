@@ -428,6 +428,7 @@ df_abc[select_columns].to_excel(os.path.join(output_folder, "output {}.xlsx".for
                 Dispatch note number
                 DO Number
                 AOD
+                AD
                 Delivery order Number
                 DN Number
                 Advise No
@@ -440,6 +441,7 @@ df_abc[select_columns].to_excel(os.path.join(output_folder, "output {}.xlsx".for
             Invoice Ref
             Invoice Reference
             Our reference No
+            Bill No
 
 General Rules
 If any value is missing, set it to null only.
