@@ -363,6 +363,8 @@ base_prompt = '''Extract the following details from the invoice:
             "Order Ref"
             "Cust VAT Reg."
             "ORDER NO"
+            "SO number"
+            "Service Order number"
 
         3.2 In the invoices, "PO Number" can not be mentioned using following names:
             "W/O Number"
