@@ -9,6 +9,8 @@ import json
 import pandas as pd
 import time
 import argparse
+import cv2
+import numpy as np
 
 with open('../../key.txt', 'r') as file:
     secret_key = file.read().strip()
@@ -18,17 +20,36 @@ def convert_pdf_to_images(pdf_path):
     return convert_from_path(pdf_path)
 
 def encode_image_to_base64(image):
-    if image.mode == 'RGBA':
-        image = image.convert('RGB')
+    # Convert NumPy array to PIL image
+    image_pil = Image.fromarray(image)
+
+    if image_pil.mode == 'RGBA':
+        image_pil = image_pil.convert('RGB')
+        
     buffered = io.BytesIO()
-    image.save(buffered, format="JPEG")
+    image_pil.save(buffered, format="JPEG")
     return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
-# def resize_image(image, max_size=(510, 653)):
-#     image.thumbnail(max_size, Image.LANCZOS)
-#     return image
+def preprocess_image(image):
+    # Convert PIL image to OpenCV format
+    open_cv_image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+    
+    # Apply Gaussian blur
+    blurred_image = cv2.GaussianBlur(open_cv_image, (5, 5), 0)
+    
+    # Convert to grayscale
+    gray_image = cv2.cvtColor(blurred_image, cv2.COLOR_BGR2GRAY)
+    
+    # Apply adaptive thresholding to get binary image
+    binary_image = cv2.adaptiveThreshold(gray_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+    
+    # Apply morphological operations
+    kernel = np.ones((3, 3), np.uint8)
+    binary_image = cv2.morphologyEx(binary_image, cv2.MORPH_CLOSE, kernel)
+    
+    return binary_image
 
-def resize_image(image, max_size=(510, 653)):
+def preprocess_image_v1(image, max_size=(5100, 6530)):
     # Resize image
     # image.thumbnail(max_size, Image.LANCZOS)
 
@@ -73,7 +94,7 @@ def get_openai_response(base64_image,prompt):
             }
         ],
         "max_tokens": 400,
-        # "temperature": 0.2
+        "temperature": 0.2
     }
 
     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
@@ -165,7 +186,7 @@ def convert_po_num_to_list(po_num, sbu_mapping_table):
 
     return validated_po_num, cleaned_po_num, sbu
 
-def create_json_output(path_pdf, prompt, sbu_mapping_table, image_resize=False):
+def create_json_output(path_pdf, prompt, sbu_mapping_table, image_preprocess=False):
     image_load_all = convert_pdf_to_images(path_pdf)
     final_cleaned_po_num = []
     final_validated_po_number = []
@@ -183,9 +204,9 @@ def create_json_output(path_pdf, prompt, sbu_mapping_table, image_resize=False):
     final_sub = ""
     
     for image_load in image_load_all:
-        # print(image_load)
-        if image_resize:
-            image_load = resize_image(image_load)
+
+        if image_preprocess:
+            image_load = preprocess_image(image_load)
         base64_image = encode_image_to_base64(image_load)        
         (
             invoice_date, currency, po_number,
@@ -226,9 +247,7 @@ def create_json_output(path_pdf, prompt, sbu_mapping_table, image_resize=False):
             final_sbu = sbu
         if sbu_address is not None:
             final_sub = sbu_address
-        # if len(image_load_all)>1:
-        #     time.sleep(30)
-        
+
     
     desired_output = {
         "invoice_date": final_invoice_date,
@@ -236,12 +255,12 @@ def create_json_output(path_pdf, prompt, sbu_mapping_table, image_resize=False):
         "po_number": final_cleaned_po_num,
         "validate_po_number": final_validated_po_number,
         
-        "suspended_tax_amount": final_suspended_tax_amount,
-        "vat_amount": final_vat_amount,
-        "tax_amount": final_overall_tax,
+        "suspended_tax_amount": format_number(final_suspended_tax_amount),
+        "vat_amount": format_number(final_vat_amount),
+        "tax_amount": format_number(final_overall_tax),
         "delivery_note_number": final_delivery_note_number,
 
-        "invoice_amount": final_invoice_amount,            
+        "invoice_amount": format_number(final_invoice_amount),            
         "invoice_no": final_invoice_no,
         "sub_total": final_sub_total,
         "invoice_type": final_invoice_type,
@@ -249,10 +268,18 @@ def create_json_output(path_pdf, prompt, sbu_mapping_table, image_resize=False):
         "sbu": final_sbu,
         "sbu_address" : final_sub
     }
+
+    for key in desired_output:
+        if desired_output[key] == "":
+            desired_output[key] = "0"
+    
     formatted_json = json.dumps(desired_output, indent=4)
     return desired_output
 
-def load_examples(example_folder, example_json_path, image_resize):
+def format_number(num):
+    return f"{num:.2f}"
+    
+def load_examples(example_folder, example_json_path, image_preprocess):
     examples = []
     with open(example_json_path, 'r') as file:
         example_outputs = json.load(file)
@@ -262,8 +289,8 @@ def load_examples(example_folder, example_json_path, image_resize):
             pdf_path = os.path.join(example_folder, filename)
             images = convert_pdf_to_images(pdf_path)
             for image in images:
-                if image_resize:
-                    image = resize_image(image)
+                if image_preprocess:
+                    image = preprocess_image(image)
                 base64_image = encode_image_to_base64(image)
                 if filename in example_outputs:
                     examples.append({
@@ -363,8 +390,6 @@ base_prompt = '''Extract the following details from the invoice:
             "Order Ref"
             "Cust VAT Reg."
             "ORDER NO"
-            "SO number"
-            "Service Order number"
 
         3.2 In the invoices, "PO Number" can not be mentioned using following names:
             "W/O Number"
@@ -501,7 +526,6 @@ base_prompt = '''Extract the following details from the invoice:
                 DN Number
                 Advise No
                 Delivery note number ≠ Job No
-                AD
             
      9. Invoice Number
         'Invoice No' Consider alternative names such as:
@@ -510,7 +534,6 @@ base_prompt = '''Extract the following details from the invoice:
             Invoice Ref
             Invoice Reference
             Our reference No
-            Bill No
 
      10. SBU Address
         Extract the corresponding code based on the provided company name or part of the address.
@@ -543,7 +566,7 @@ If any value is missing, set it to null only.
     '''
 
 base_location = "../../"
-image_resize=True
+image_preprocess=True
 sbu_mapping = (
     pd.read_csv(os.path.join(base_location,'conf', 'sbu_type.csv'))
 )
@@ -568,7 +591,7 @@ batch_files
 output_dc = {}
 for i in batch_files:
     try:
-        outcome = create_json_output(os.path.join(base_folder, i), prompt, sbu_mapping, image_resize)
+        outcome = create_json_output(os.path.join(base_folder, i), prompt, sbu_mapping, image_preprocess)
         if outcome is not None:
             output_dc[i] = outcome
             print('processed', i)
