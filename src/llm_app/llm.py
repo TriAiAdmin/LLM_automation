@@ -9,8 +9,8 @@ import json
 import pandas as pd
 import time
 import argparse
-import cv2
-import numpy as np
+from datetime import datetime
+
 
 with open('../../key.txt', 'r') as file:
     secret_key = file.read().strip()
@@ -20,36 +20,17 @@ def convert_pdf_to_images(pdf_path):
     return convert_from_path(pdf_path)
 
 def encode_image_to_base64(image):
-    # Convert NumPy array to PIL image
-    image_pil = Image.fromarray(image)
-
-    if image_pil.mode == 'RGBA':
-        image_pil = image_pil.convert('RGB')
-        
+    if image.mode == 'RGBA':
+        image = image.convert('RGB')
     buffered = io.BytesIO()
-    image_pil.save(buffered, format="JPEG")
+    image.save(buffered, format="JPEG")
     return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
-def preprocess_image(image):
-    # Convert PIL image to OpenCV format
-    open_cv_image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-    
-    # Apply Gaussian blur
-    blurred_image = cv2.GaussianBlur(open_cv_image, (5, 5), 0)
-    
-    # Convert to grayscale
-    gray_image = cv2.cvtColor(blurred_image, cv2.COLOR_BGR2GRAY)
-    
-    # Apply adaptive thresholding to get binary image
-    binary_image = cv2.adaptiveThreshold(gray_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
-    
-    # Apply morphological operations
-    kernel = np.ones((3, 3), np.uint8)
-    binary_image = cv2.morphologyEx(binary_image, cv2.MORPH_CLOSE, kernel)
-    
-    return binary_image
+# def resize_image(image, max_size=(510, 653)):
+#     image.thumbnail(max_size, Image.LANCZOS)
+#     return image
 
-def preprocess_image_v1(image, max_size=(5100, 6530)):
+def resize_image(image, max_size=(510, 653)):
     # Resize image
     # image.thumbnail(max_size, Image.LANCZOS)
 
@@ -94,7 +75,7 @@ def get_openai_response(base64_image,prompt):
             }
         ],
         "max_tokens": 400,
-        "temperature": 0.2
+        # "temperature": 0.2
     }
 
     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
@@ -186,7 +167,7 @@ def convert_po_num_to_list(po_num, sbu_mapping_table):
 
     return validated_po_num, cleaned_po_num, sbu
 
-def create_json_output(path_pdf, prompt, sbu_mapping_table, image_preprocess=False):
+def create_json_output(path_pdf, prompt, sbu_mapping_table, image_resize=False):
     image_load_all = convert_pdf_to_images(path_pdf)
     final_cleaned_po_num = []
     final_validated_po_number = []
@@ -195,7 +176,7 @@ def create_json_output(path_pdf, prompt, sbu_mapping_table, image_preprocess=Fal
     final_suspended_tax_amount = 0
     final_vat_amount = 0
     final_overall_tax = 0
-    final_delivery_note_number = ""
+    final_delivery_note_number = []
     final_invoice_amount = 0
     final_invoice_no = ""
     final_sub_total = 0
@@ -204,9 +185,9 @@ def create_json_output(path_pdf, prompt, sbu_mapping_table, image_preprocess=Fal
     final_sub = ""
     
     for image_load in image_load_all:
-
-        if image_preprocess:
-            image_load = preprocess_image(image_load)
+        # print(image_load)
+        if image_resize:
+            image_load = resize_image(image_load)
         base64_image = encode_image_to_base64(image_load)        
         (
             invoice_date, currency, po_number,
@@ -233,12 +214,12 @@ def create_json_output(path_pdf, prompt, sbu_mapping_table, image_preprocess=Fal
         final_cleaned_po_num += cleaned_po_num
         final_validated_po_number += validated_po_number
 
-        final_invoice_date = invoice_date
+        final_invoice_date = fix_date(invoice_date)
         final_currency = currency
         final_suspended_tax_amount = suspended_tax_amount
         final_vat_amount = vat_amount
         final_overall_tax = overall_tax
-        final_delivery_note_number = delivery_note_number
+        final_delivery_note_number += [delivery_note_number]
         final_invoice_amount = invoice_amount
         final_invoice_no = invoice_no
         final_sub_total = sub_total
@@ -247,7 +228,9 @@ def create_json_output(path_pdf, prompt, sbu_mapping_table, image_preprocess=Fal
             final_sbu = sbu
         if sbu_address is not None:
             final_sub = sbu_address
-
+        # if len(image_load_all)>1:
+        #     time.sleep(30)
+        
     
     desired_output = {
         "invoice_date": final_invoice_date,
@@ -255,12 +238,12 @@ def create_json_output(path_pdf, prompt, sbu_mapping_table, image_preprocess=Fal
         "po_number": final_cleaned_po_num,
         "validate_po_number": final_validated_po_number,
         
-        "suspended_tax_amount": format_number(final_suspended_tax_amount),
-        "vat_amount": format_number(final_vat_amount),
-        "tax_amount": format_number(final_overall_tax),
+        "suspended_tax_amount": final_suspended_tax_amount,
+        "vat_amount": final_vat_amount,
+        "tax_amount": final_overall_tax,
         "delivery_note_number": final_delivery_note_number,
 
-        "invoice_amount": format_number(final_invoice_amount),            
+        "invoice_amount": final_invoice_amount,            
         "invoice_no": final_invoice_no,
         "sub_total": final_sub_total,
         "invoice_type": final_invoice_type,
@@ -268,18 +251,33 @@ def create_json_output(path_pdf, prompt, sbu_mapping_table, image_preprocess=Fal
         "sbu": final_sbu,
         "sbu_address" : final_sub
     }
-
-    for key in desired_output:
-        if desired_output[key] == "":
-            desired_output[key] = "0"
-    
     formatted_json = json.dumps(desired_output, indent=4)
     return desired_output
 
-def format_number(num):
-    return f"{num:.2f}"
+def fix_date(date_str):
+    # Parse the input date string
+    try:
+        input_date = datetime.strptime(date_str, '%d/%m/%Y')
+        current_date = datetime.now()
     
-def load_examples(example_folder, example_json_path, image_preprocess):
+        # Check if the input date is in the future
+        if input_date > current_date:
+            day, month, year = input_date.day, input_date.month, input_date.year
+    
+            # Swap day and month if month is less than or equal to 12
+            if day <= 12:
+                fixed_date = datetime(year, day, month)
+                # Re-check if the fixed date is not in the future
+                if fixed_date <= current_date:
+                    return fixed_date.strftime('%d/%m/%Y')
+        
+        # If no swap is needed, or after swapping the date is still in the future
+        return input_date.strftime('%d/%m/%Y')
+    except:
+        return date_str
+
+
+def load_examples(example_folder, example_json_path, image_resize):
     examples = []
     with open(example_json_path, 'r') as file:
         example_outputs = json.load(file)
@@ -289,8 +287,8 @@ def load_examples(example_folder, example_json_path, image_preprocess):
             pdf_path = os.path.join(example_folder, filename)
             images = convert_pdf_to_images(pdf_path)
             for image in images:
-                if image_preprocess:
-                    image = preprocess_image(image)
+                if image_resize:
+                    image = resize_image(image)
                 base64_image = encode_image_to_base64(image)
                 if filename in example_outputs:
                     examples.append({
@@ -347,7 +345,14 @@ base_prompt = '''Extract the following details from the invoice:
             24/10/2024, 
             24/Oct/2024.             
         convert it to a uniform format DD/MM/YYYY.
-    
+
+        If the extracted date is in a format such as 24/5/26, interpret it as DD/MM/YY.
+            Ensure that the extracted date is not a future date compared to today.
+            If it is a future date, correct it to be within the current year context. 
+            For instance, if the extracted date is 24/5/26 and today's date is in the year 2024, the extracted date should be interpreted as 26/05/2024, not 24/05/2026.
+
+        If the extracted date could have the day and month swapped, verify the month to ensure it is valid based on the current date. For example, if the extracted date is 5/10/2024 and today is earlier in the year 2024, interpret the date as 10/5/2024 (10th May 2024) instead of 5/10/2024 (5th October 2024), since October has not yet come.
+
     2. Currency Type
         I need to extract the standard currency type used in these invoices. Here's the process to follow:
         1. **Direct Currency Extraction**:
@@ -566,7 +571,7 @@ If any value is missing, set it to null only.
     '''
 
 base_location = "../../"
-image_preprocess=True
+image_resize=True
 sbu_mapping = (
     pd.read_csv(os.path.join(base_location,'conf', 'sbu_type.csv'))
 )
@@ -574,7 +579,7 @@ sbu_mapping[['min', 'max']] = sbu_mapping[['min', 'max']].apply(pd.to_numeric)
 
 prompt = base_prompt
 
-#invoice_folder_name = 'multiple pages 1'
+invoice_folder_name = 'multiple pages 1'
 
 parser = argparse.ArgumentParser(description='activity')
 parser.add_argument('file_name', type=str, help='pdf file name')
@@ -591,7 +596,7 @@ batch_files
 output_dc = {}
 for i in batch_files:
     try:
-        outcome = create_json_output(os.path.join(base_folder, i), prompt, sbu_mapping, image_preprocess)
+        outcome = create_json_output(os.path.join(base_folder, i), prompt, sbu_mapping, image_resize)
         if outcome is not None:
             output_dc[i] = outcome
             print('processed', i)
