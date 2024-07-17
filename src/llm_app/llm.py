@@ -185,7 +185,6 @@ def create_json_output(path_pdf, prompt, sbu_mapping_table, image_resize=False):
     final_sub = ""
     
     for image_load in image_load_all:
-        # print(image_load)
         if image_resize:
             image_load = resize_image(image_load)
         base64_image = encode_image_to_base64(image_load)        
@@ -215,7 +214,7 @@ def create_json_output(path_pdf, prompt, sbu_mapping_table, image_resize=False):
         final_validated_po_number += validated_po_number
 
         final_invoice_date = fix_date(invoice_date)
-        final_currency = currency
+        final_currency = validate_country_code(currency, currency_codes)
         final_suspended_tax_amount = suspended_tax_amount
         final_vat_amount = vat_amount
         final_overall_tax = overall_tax
@@ -228,9 +227,6 @@ def create_json_output(path_pdf, prompt, sbu_mapping_table, image_resize=False):
             final_sbu = sbu
         if sbu_address is not None:
             final_sub = sbu_address
-        # if len(image_load_all)>1:
-        #     time.sleep(30)
-        
     
     desired_output = {
         "invoice_date": final_invoice_date,
@@ -253,6 +249,12 @@ def create_json_output(path_pdf, prompt, sbu_mapping_table, image_resize=False):
     }
     formatted_json = json.dumps(desired_output, indent=4)
     return desired_output
+
+def validate_country_code(c_code, currency_codes):
+    if c_code.upper() in currency_codes:
+        return c_code.upper()
+    else:
+        return 'LKR'
 
 def fix_date(date_str):
     # Parse the input date string
@@ -374,7 +376,7 @@ base_prompt = '''Extract the following details from the invoice:
             - Canada -> CAD
             - India -> INR
             - Japan -> JPY
-            - Default -> LKR
+            - Sri Lanka -> LKR
         
         Also, include any additional steps or checks that might be useful for ensuring accurate extraction and inference.
 
@@ -425,7 +427,13 @@ base_prompt = '''Extract the following details from the invoice:
         Follow these conditions:
             The "Suspended Vat" amount should be a numerical value, which can include decimal points.
             If the invoice does not have a "Suspended Vat" amount, the default value should be 0.
-            
+
+        Check the extracted numerical value for formatting issues such as improperly placed decimal points. 
+                e.g., "2145.046.40" should be interpreted as "2145046.40"
+                    Assume the rightmost part after the last decimal point is the actual decimal part.
+
+                e.g., "58,319.910" should be interpreted as "58319.91"
+        
         Additional Instructions:
             Ensure to search for all possible synonyms ("SVAT", "Suspended Vat", "Suspended Tax").
             Accurately extract the numerical value associated with these terms.
@@ -452,6 +460,12 @@ base_prompt = '''Extract the following details from the invoice:
                     VAT 18.00 12347680
                 Output : 
                     12347680
+
+        Check the extracted numerical value for formatting issues such as improperly placed decimal points. 
+                e.g., "2145.046.40" should be interpreted as "2145046.40"
+                    Assume the rightmost part after the last decimal point is the actual decimal part.
+
+                e.g., "58,319.910" should be interpreted as "58319.91"
 
         Additional Instructions:
             Ensure to search for all possible synonyms ("Vat", "Tax").
@@ -486,7 +500,9 @@ base_prompt = '''Extract the following details from the invoice:
 
             Check the extracted numerical value for formatting issues such as improperly placed decimal points. 
                 e.g., "2145.046.40" should be interpreted as "2145046.40"
-                 Assume the rightmost part after the last decimal point is the actual decimal part.
+                    Assume the rightmost part after the last decimal point is the actual decimal part.
+
+                e.g., "58,319.910" should be interpreted as "58319.91"
 
             Data type of the "Invoice Amount" is str.
 
@@ -513,7 +529,8 @@ base_prompt = '''Extract the following details from the invoice:
 
             Check the extracted numerical value for formatting issues such as improperly placed decimal points. 
                 e.g., "2145.046.40" should be interpreted as "2145046.40". 
-                 Assume the rightmost part after the last decimal point is the actual decimal part.
+                    Assume the rightmost part after the last decimal point is the actual decimal part.
+                e.g., "58,319.910" should be interpreted as "58319.91"
                         
             Output the extracted numerical value as the "Sub Total."
 
@@ -576,10 +593,10 @@ sbu_mapping = (
     pd.read_csv(os.path.join(base_location,'conf', 'sbu_type.csv'))
 )
 sbu_mapping[['min', 'max']] = sbu_mapping[['min', 'max']].apply(pd.to_numeric)
-
+currency_codes = ["USD", "EUR", "GBP", "AUD", "CAD", "INR", "JPY", "LKR"]
 prompt = base_prompt
 
-invoice_folder_name = 'multiple pages 1'
+#invoice_folder_name = 'multiple pages 1'
 
 parser = argparse.ArgumentParser(description='activity')
 parser.add_argument('file_name', type=str, help='pdf file name')
