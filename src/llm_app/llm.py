@@ -218,7 +218,9 @@ def create_json_output(path_pdf, prompt, sbu_mapping_table, image_resize=False):
         final_suspended_tax_amount = suspended_tax_amount
         final_vat_amount = vat_amount
         final_overall_tax = overall_tax
-        final_delivery_note_number += [delivery_note_number]
+        if delivery_note_number is not None:
+            if delivery_note_number != "":
+                final_delivery_note_number += [delivery_note_number]
         final_invoice_amount = invoice_amount
         final_invoice_no = invoice_no
         final_sub_total = sub_total
@@ -247,10 +249,16 @@ def create_json_output(path_pdf, prompt, sbu_mapping_table, image_resize=False):
         "sbu": final_sbu,
         "sbu_address" : final_sub
     }
+    if len(desired_output['delivery_note_number']) == 0:
+        desired_output['delivery_note_number'] = desired_output['invoice_no']
+
+    if (desired_output['sbu'] is None) | (desired_output['sbu'] == ''):
+        desired_output['sbu'] = desired_output['sbu_address']
     formatted_json = json.dumps(desired_output, indent=4)
     return desired_output
 
 def validate_country_code(c_code, currency_codes):
+    c_code = str(c_code)
     if c_code.upper() in currency_codes:
         return c_code.upper()
     else:
@@ -596,7 +604,7 @@ sbu_mapping[['min', 'max']] = sbu_mapping[['min', 'max']].apply(pd.to_numeric)
 currency_codes = ["USD", "EUR", "GBP", "AUD", "CAD", "INR", "JPY", "LKR"]
 prompt = base_prompt
 
-#invoice_folder_name = 'multiple pages 1'
+# invoice_folder_name = 'multiple pages 1'
 
 parser = argparse.ArgumentParser(description='activity')
 parser.add_argument('file_name', type=str, help='pdf file name')
