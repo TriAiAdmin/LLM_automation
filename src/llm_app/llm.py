@@ -167,8 +167,13 @@ def convert_po_num_to_list(po_num, sbu_mapping_table):
 
     return validated_po_num, cleaned_po_num, sbu
 
-def create_json_output(path_pdf, prompt, sbu_mapping_table, image_resize=False):
+def create_json_output(path_pdf, prompt_collection, sbu_mapping_table, image_resize=False):
     image_load_all = convert_pdf_to_images(path_pdf)
+    
+    prompt = prompt_collection['base_prompt']
+    if 'prima' in path_pdf.lower():
+        prompt = prompt_collection['prima_prompt']
+    
     final_cleaned_po_num = []
     final_validated_po_number = []
     final_invoice_date = ""
@@ -404,7 +409,11 @@ base_prompt = '''Extract the following details from the invoice:
             "Manual No"
             "Order Ref"
             "Cust VAT Reg."
-            "ORDER NO"
+            "ORDER NO",
+            "Service Order No",
+            "SO Number",
+            "SO No",
+            "Reference No"
 
         3.2 In the invoices, "PO Number" can not be mentioned using following names:
             "W/O Number"
@@ -426,7 +435,6 @@ base_prompt = '''Extract the following details from the invoice:
             Identifies all "PO Number" s based on the alternative names.
             Check for the edge cases.
             Validates each extracted "PO Number" based on the criteria mentioned above.
-            Data type of the "Invoice Amount" is str.
 
     4. Suspended Tax Amount
         Need to extract the "Suspended Vat" amount. 
@@ -446,7 +454,6 @@ base_prompt = '''Extract the following details from the invoice:
             Ensure to search for all possible synonyms ("SVAT", "Suspended Vat", "Suspended Tax").
             Accurately extract the numerical value associated with these terms.
             If none of these terms are found or if no numerical value is associated with them, set the "suspended_vat_amount" to 0.
-            Data type of the "Invoice Amount" is str.
 
     5. Vat Amount
         Need to extract the "Vat" amount.
@@ -479,8 +486,6 @@ base_prompt = '''Extract the following details from the invoice:
             Ensure to search for all possible synonyms ("Vat", "Tax").
             Accurately extract the numerical value associated with these terms.
             If none of these terms are found or if no numerical value is associated with them, set the "vat_amount" to 0.
-            Data type of the "Invoice Amount" is str.
-
 
     6. Invoice Amount
         Need to extract the "Invoice Amount" from the invoice. 
@@ -542,7 +547,6 @@ base_prompt = '''Extract the following details from the invoice:
                         
             Output the extracted numerical value as the "Sub Total."
 
-            Data type of the "Invoice Amount" is str.
 
     8. Delivery Note Number Validation
         when considering the 'Delivery note number' should follow below details:
@@ -555,7 +559,9 @@ base_prompt = '''Extract the following details from the invoice:
                 Delivery order Number
                 DN Number
                 Advise No
-                Delivery note number ≠ Job No
+                D/O No
+            if non of the above alternative names does not exists then look for following alternatives.
+                Job No
             
      9. Invoice Number
         'Invoice No' Consider alternative names such as:
@@ -594,6 +600,224 @@ base_prompt = '''Extract the following details from the invoice:
 General Rules
 If any value is missing, set it to null only.
     '''
+
+
+prima_prompt = '''Extract the following details from the invoice:
+        Invoice Date,
+        Currency Type,
+        PO Number,
+        Suspended Tax Amount,
+        Vat Amount,
+        Delivery Note Number Validation,
+        Invoice Amount,
+        Invoice Number,
+        Sub Total,
+        SBU Address
+        from the image and return the response as a JSON object with
+        'invoice_date'
+        'currency',
+        'po_number',
+        'suspended_tax_amount',
+        'vat_amount',
+        'delivery_note_number',
+        'invoice_amount',
+        'invoice_no',
+        'sub_total',
+        'sbu_address'
+         as keys.
+
+    must return json object only no more any text provide
+
+    1. Invoice Date
+        Extract the accurate Invoice Date from the invoice.
+    
+        Invoice Date format is as below:
+            ddmmyy 
+                eg:- 130624 consider this as 13th June(06) 2024
+                         
+        convert it to a uniform format DD/MM/YYYY.
+
+            Ensure that the extracted date is not a future date compared to today.
+            If it is a future date, correct it to be within the current year context. 
+            For instance, if the extracted date is 24/5/26 and today's date is in the year 2024, the extracted date should be interpreted as 26/05/2024, not 24/05/2026.
+
+        If the extracted date could have the day and month swapped, verify the month to ensure it is valid based on the current date. For example, if the extracted date is 5/10/2024 and today is earlier in the year 2024, interpret the date as 10/5/2024 (10th May 2024) instead of 5/10/2024 (5th October 2024), since October has not yet come.
+
+    2. Currency Type
+        I need to extract the standard currency type used in these invoices. Here's the process to follow:
+        1. **Direct Currency Extraction**:
+           - Search for common currency symbols (e.g., $, €, £) or currency codes (e.g., USD, EUR, GBP) within the text of the PDF.
+           - If a currency is mentioned, extract it as the standard currency type.
+
+        2. **Currency Inference from Country**:
+           - If no currency is mentioned in the invoice, check for the presence of a country name in the address section.
+           - Use the country name to infer the currency type. For example, if the country is "United States," the currency should be USD; if the country is "Germany," the currency should be EUR, etc.
+
+        3. **Default Currency**:
+           - If neither currency nor country is mentioned in the invoice, default the standard currency type to LKR (Sri Lankan Rupee)
+
+    3. PO Number
+    
+        There could be multiple "PO Numbers". And there should be at least one "PO Numbers"
+        
+        3.1 In the invoices, "PO Number" can be mentioned using various alternative names:
+            "PO number"
+            "Purchase order number"
+            "YOUR ORDER REF NO"
+            "PO No"
+            "your order reference number"
+            
+        3.2 Once a "PO Number" is extracted, it should be validated based on the following criteria:
+            3a) PO number should contains more than 7 characters.
+            3b) All characters of the "PO Number" should be digits.
+            3c) there should be at least one "PO Number".
+
+    4. Suspended Tax Amount
+        Need to extract the "Suspended Vat" amount. 
+        Note that the "Suspended Vat" can also be referred to as "SVAT" or "Suspended Tax". 
+        
+        Follow these conditions:
+            The "Suspended Vat" amount should be a numerical value, which can include decimal points.
+            If the invoice does not have a "Suspended Vat" amount, the default value should be 0.
+
+        Check the extracted numerical value for formatting issues such as improperly placed decimal points. 
+                e.g., "2145.046.40" should be interpreted as "2145046.40"
+                    Assume the rightmost part after the last decimal point is the actual decimal part.
+
+                e.g., "58,319.910" should be interpreted as "58319.91"
+        
+        Additional Instructions:
+            Ensure to search for all possible synonyms ("SVAT", "Suspended Vat", "Suspended Tax").
+            Accurately extract the numerical value associated with these terms.
+            If none of these terms are found or if no numerical value is associated with them, set the "suspended_vat_amount" to 0.
+            Data type of the "Invoice Amount" is str.
+
+    5. Vat Amount
+        Need to extract the "Vat" amount.
+
+        The "Vat" can be referred to using different terms, including but not limited to:
+            "Tax"
+            "VAT"
+            "TAX"
+            "VAT 18%"
+        
+        Follow these conditions:
+            The "Vat" amount should be a numerical value, which can include decimal points.
+            If the invoice does not have a "Vat" amount, the default value should be 0.
+
+        Edge Cases:
+            If the text "VAT" is followed by two numbers separated by a space (e.g., "VAT 18 12347680"), the second number is the VAT amount.
+            example:
+                Text :
+                    VAT 18.00 12347680
+                Output : 
+                    12347680
+
+        Check the extracted numerical value for formatting issues such as improperly placed decimal points. 
+                e.g., "2145.046.40" should be interpreted as "2145046.40"
+                    Assume the rightmost part after the last decimal point is the actual decimal part.
+
+                e.g., "58,319.910" should be interpreted as "58319.91"
+
+        Additional Instructions:
+            Ensure to search for all possible synonyms ("Vat", "Tax").
+            Accurately extract the numerical value associated with these terms.
+            If none of these terms are found or if no numerical value is associated with them, set the "vat_amount" to 0.
+            Data type of the "Invoice Amount" is str.
+
+
+    6. Invoice Amount
+        Need to extract the "Invoice Value" from the invoice. 
+        The "Invoice Value" can be referred as "Invoice Amount"
+              
+        
+        Extract the numerical value associated with the identified term. 
+            
+            The value should be a number and can include decimal points.
+
+            Check the extracted numerical value for formatting issues such as improperly placed decimal points. 
+                e.g., "2145.046.40" should be interpreted as "2145046.40"
+                 Assume the rightmost part after the last decimal point is the actual decimal part.
+
+            Data type of the "Invoice Value" is decimal.
+
+    7. Sub Total
+        Need to extract the "Sub Total" from the invoice. 
+        The "Sub Total" can be referred to using different terms, including but not limited to:
+            Sub Total
+            Sub Amount
+            Net Total
+            Net Amount
+        
+        Please follow these steps:
+            Identify the section of the invoice where the sub total amount is listed. Look for the following synonyms to locate this section:
+                Sub Total
+                Sub Amount
+                Net Total
+                Net Amount
+                
+            Extract the numerical value associated with the identified term. 
+            
+            The value should be a number and can include decimal points.
+            
+            Ensure that the extracted value is the intermediate total amount before any taxes, discounts, or additional charges are applied, not the final total amount due on the invoice.
+
+            Check the extracted numerical value for formatting issues such as improperly placed decimal points. 
+                e.g., "2145.046.40" should be interpreted as "2145046.40". 
+                    Assume the rightmost part after the last decimal point is the actual decimal part.
+                e.g., "58,319.910" should be interpreted as "58319.91"
+                        
+            Output the extracted numerical value as the "Sub Total."
+
+            Data type of the "Invoice Amount" is str.
+
+    8. Delivery Note Number Validation
+        'Delivery note number' should follow below details:
+        Extract the accurate Delivery note number from the invoice.
+            Consider alternative names such as:
+                Delivery note number
+                OUR DELIVERY NO
+            
+     9. Invoice Number
+        'Invoice No' Consider alternative names such as:
+            Invoice No
+            Invoice number	
+
+
+     10. SBU Address
+        Extract the corresponding code based on the provided company name or part of the address.
+
+            Input Data:
+                C100: Ceylon Biscuit Limited, Makumbura, Pannipitiya
+                C200: CBL Food International (PVT) Limited, Ranala
+                C300: Convenience Food (PVT) LTD, Kandawala, Ratmalana
+                C400: CBL Plenty Foods (PVT) LTD, Ratmalana
+                C500: CBL Exports (PVT) LTD, Seethawaka
+                C600: CBL Natural Foods (PVT) LTD, Minuwangoda
+                C700: CBL Cocos (PVT) LTD, Alawwa
+                C800: CBL Global Foods (PVT) LTD, Alawwa
+    
+            Examples:
+                1. Input: "Ceylon Biscuit Limited"
+                   Output: "C100"
+                
+                2. Input: "Ranala"
+                   Output: "C200"
+                
+                3. Input: "Kandawala"
+                   Output: "C300"
+                
+                4. Input: "Minuwangoda"
+                   Output: "C600"
+        
+General Rules
+If any value is missing, set it to null only.
+    '''
+
+prompt_collection = {
+    "base_prompt": base_prompt,
+    "prima_prompt": prima_prompt
+}
 
 base_location = "../../"
 image_resize=True
